@@ -8,6 +8,7 @@
 [node name="FollowerUnit" type="Area2D"]
 collision_layer = 2
 script = ExtResource("1_5vtvk")
+strength = 3000.0
 max_speed = 1500.0
 radius = 20.0
 
