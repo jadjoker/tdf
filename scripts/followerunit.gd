@@ -1,37 +1,33 @@
 extends Area2D
 
-@export var follow_speed: float = 150.0
-@export var follow_distance: float = 24.0
+@export var strength: float = 1500.0      # how strongly this unit is pulled toward the player
+@export var max_speed: float = 1800.0     # speed cap
+@export var radius: float = 14.0          # used for soft collision spacing in Phase1
+
+var vel: Vector2 = Vector2.ZERO
 
 var is_collected: bool = false
 var target: Node2D = null
 
 
 func _ready() -> void:
+	# Detect when the player overlaps this unit
 	body_entered.connect(_on_body_entered)
 
 
 func _on_body_entered(body: Node) -> void:
-	# If already collected, ignore further collisions
 	if is_collected:
 		return
 
-	# Only respond to the player
+	# Only react to the player
 	if body.is_in_group("player"):
 		is_collected = true
 		target = body
-		# Optional: visually show it's collected (e.g. scale or modulate)
+
+		# Visual feedback
 		if has_node("Sprite2D"):
-			$Sprite2D.modulate = Color(0.5, 1.0, 0.5)  # light green tint
+			$Sprite2D.modulate = Color(0.5, 1.0, 0.5)
 
-
-func _process(delta: float) -> void:
-	if not is_collected or target == null:
-		return
-
-	var desired_pos: Vector2 = target.global_position
-	var distance: float = global_position.distance_to(desired_pos)
-
-	if distance > follow_distance:
-		var dir: Vector2 = global_position.direction_to(desired_pos)
-		global_position += dir * follow_speed * delta
+		# Mark this unit as part of the swarm so Phase1 can move it
+		add_to_group("swarm_unit")
+		print("Follower collected:", name)

@@ -1,15 +1,19 @@
 [gd_scene load_steps=4 format=3 uid="uid://cyhxmwjpqq5at"]
 
 [ext_resource type="Script" uid="uid://c1n4pkhgao6jo" path="res://scripts/followerunit.gd" id="1_5vtvk"]
-[ext_resource type="Texture2D" uid="uid://cjjh4h4ta0t5" path="res://icon.svg" id="1_sppyp"]
+[ext_resource type="Texture2D" uid="uid://c2l0hwuo7sw8f" path="res://assets/follower_circle_placeholder.png" id="2_5vtvk"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_5vtvk"]
 
 [node name="FollowerUnit" type="Area2D"]
+collision_layer = 2
 script = ExtResource("1_5vtvk")
+max_speed = 1500.0
+radius = 20.0
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("1_sppyp")
+texture = ExtResource("2_5vtvk")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+scale = Vector2(2.29893, 2.29893)
 shape = SubResource("CircleShape2D_5vtvk")
