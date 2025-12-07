@@ -10,11 +10,12 @@ collision_layer = 2
 script = ExtResource("1_5vtvk")
 strength = 3000.0
 max_speed = 1500.0
-radius = 20.0
+radius = 10.0
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
+scale = Vector2(0.229366, 0.229366)
 texture = ExtResource("2_5vtvk")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-scale = Vector2(2.29893, 2.29893)
+scale = Vector2(0.522673, 0.522673)
 shape = SubResource("CircleShape2D_5vtvk")
