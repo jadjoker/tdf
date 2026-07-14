@@ -1,8 +1,9 @@
 # tdf — Movement Sandbox Bible
 
 > Single source of truth. Update after every meaningful decision.
-> This project is a **feel-first sandbox**: the goal is to make the swarm movement
-> feel as good as possible. Gameplay is deliberately parked (see bottom).
+> Feel-first project: the swarm movement IS the game. Gameplay direction decided
+> Jul 2026 — **momentum combat** (see Gameplay Direction) — with the standing rule
+> that no mechanic may compromise the movement feel.
 
 ---
 
@@ -20,6 +21,8 @@
 | Jul 2026 | Graphics pass #3 — **collectables rebuilt as vector** with the same spring squash/stretch system as the player (per-unit randomized stiffness so wobbles desync); placeholder PNG no longer used anywhere |
 | Jul 2026 | Perf pass A (lag at 100 collected units): spatial-hash separation with cached arrays, physics retired on collect, trails throttled to 30 Hz, debug prints removed, perf HUD added |
 | Jul 2026 | Perf pass B (profiler data showed render side scaling ~8→19ms with swarm size): swarm bodies drawn by **one MultiMesh** (vector look baked to HDR texture at startup), all trails drawn by **one shared TrailRenderer**; per-unit canvas redraw eliminated. Spring/deform physics unchanged. |
+| Jul 2026 | **Gameplay decided: momentum combat** ("crack the whip" + "the flock is your health bar" fused). **G1 built** — velocity-scaled contact damage on dumb chaser enemies, hit flash/knockback/death burst, trickle spawner, kill counter |
+| Jul 2026 | **Physics-juice pass**: enemies physically real (shoved by units, ring grinds/carries them, solid player, no enemy stacking), jelly impact deformation on enemies, death shockwaves ripple the flock, hit-stop micro-freeze, trauma camera shake, whip-crack sparks, combo chains, kills drop recruitable strays (cap 250) |
 
 ---
 
@@ -125,9 +128,67 @@ towerdefense/
 │   ├── grid_background.gd   — world-space grid backdrop
 │   ├── trail_renderer.gd    — ALL swarm trails in one canvas item (perf pass B)
 │   ├── perf_logger.gd       — buffered per-frame CSV profiler (toggle on Phase1)
-│   └── phase_1.gd           — THE movement system (sacred) + MultiMesh body renderer
+│   ├── enemy.gd             — G1 chaser: velocity-scaled contact damage intake, juice
+│   ├── hit_burst.gd         — one-shot expanding ring on enemy death
+│   └── phase_1.gd           — THE movement system (sacred) + renderers + enemy spawner
 └── git_helper.py / .bat     — custom git convenience tooling
 ```
+
+---
+
+## Gameplay Direction — Momentum Combat (decided Jul 2026)
+
+**Fantasy:** you lead a murmuration — anything that touches it gets flayed by the current.
+Your body language is the entire combat kit: no buttons, no abilities. Aim by driving.
+
+**The load-bearing rule:** damage = unit contact scaled by unit *velocity*.
+- Parked/slow swarm (< `min_damage_speed` 200 px/s) → harmless
+- Orbit ring (~400 px/s tangential) → slow grinder for close defense
+- Sprint-by lash / whip-crack on sharp turns (up to 1500 px/s) → shreds
+- Tail-end units genuinely swing fastest in turns (real whip dynamics, free from the physics)
+
+**The second pillar (G2+):** enemies don't hurt *you* — they eat your **stragglers**.
+The flock is health, weapon, and spectacle at once. Strays in the world are the
+pickup economy. Defense and offense are the same verb: moving well.
+
+### Gameplay Milestones
+1. ✅ **G1 — the core question (Jul 2026):** velocity-scaled contact damage on dumb
+   chaser enemies (`enemy.gd`, spawner in phase_1, kill counter). Tuning exports on
+   Enemy: `min_damage_speed`, `speed_for_max`, `max_unit_dps`. Juice: hit flash,
+   velocity knockback, expanding-ring death burst (`hit_burst.gd`).
+   *Verdict pending playtest: is whip-cracking fun?*
+1b. ✅ **G1.5 — physics-juice pass (Jul 2026):** enemies are physically real —
+   units shove them (`_resolve_enemy_collisions` in phase_1: enemy takes 75% of
+   overlap, units flex 25%, `GRIND_TRANSFER` carries them along the ring's spin),
+   player is a solid body, enemies don't stack. Impact feedback: jelly deformation
+   kick on enemies, death shockwave (`SHOCKWAVE_RADIUS/POWER`) blooms the flock,
+   hit-stop (0.05s @ 5% time scale), trauma-based camera shake (shake = trauma²),
+   whip-crack sparks (hits ≥0.7 frac), combo chains (`COMBO_WINDOW` 1.6s), kills
+   drop a recruitable stray (`MAX_TOTAL_UNITS` 250).
+2. ⬜ **G2 — stakes:** enemies eat straggler units (tail-biters); eaten units respawn
+   as strays at map edges; losing the whole flock = game over
+3. ⬜ **G3 — economy:** finite strays per area, risky retrieval runs, swarm size as score
+4. ⬜ **G4 — enemy variety:** chaser (outrun) / interceptor (cuts your line) /
+   armored (whip-crack speed threshold only) / tail-biter (punishes straight lines)
+5. ⬜ **G5 — structure:** waves or open-field escalation, score, difficulty curve
+6. ⬜ **G6 — juice:** kill sounds (hit-stop + combo already built in G1.5)
+
+### Physics Toys Backlog (lean into what's cool)
+- **Heavy tank enemy** — plows *through* the flock physically (reverse push share),
+  scattering units like bowling pins; kill it by sustained grind, not whip-cracks
+- **Gravity wells** — map features that bend the flock's flow (and enemies) around them;
+  slingshot maneuvers for free speed = free damage
+- **Bouncy arena walls** — elastic reflection so the whip can be banked off boundaries
+- **Breakable obstacles** — crates/crystals that shatter into collectible shards with
+  momentum inherited from the hit
+- **Enemy corpses with momentum** — death burst throws debris shards along the killing
+  unit's velocity vector
+- **Tether mode** — hold a key to stiffen the swarm into an elastic net between
+  you and a anchor point (physics rope of units)
+
+### Parked (recorded, not the direction)
+- Shepherd tower defense (base + waves — may return as G5+ structure)
+- Comet courier / gauntlet levels (could be a bonus mode)
 
 ---
 

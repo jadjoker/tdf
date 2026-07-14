@@ -52,15 +52,56 @@ var _perf_accum: float = 0.0
 @export var perf_logging: bool = true
 var _perf_logger: Node = null
 
+# Gameplay G1 — momentum-combat prototype: a trickle of dumb chasers to
+# whip-crack. Enemies only start once the first unit is collected.
+@export var enemies_enabled: bool = true
+@export var enemy_spawn_interval: float = 4.0
+@export var max_enemies: int = 6
+@export var enemy_spawn_distance: float = 900.0
+
+var enemy_scene: PackedScene = preload("res://scenes/Enemy.tscn")
+var kills: int = 0
+var _enemy_spawn_timer: float = 2.0
+var _kills_label: Label
+
+# Physics-juice pass: impact feedback systems
+const COMBO_WINDOW := 1.6            # seconds between kills to keep the chain
+const SHOCKWAVE_RADIUS := 160.0      # death blast physically ripples the flock
+const SHOCKWAVE_POWER := 900.0
+const MAX_TOTAL_UNITS := 250         # cap on strays dropped by kills
+
+var _cam: Camera2D
+var _trauma: float = 0.0             # camera shake energy, decays; shake = trauma²
+var _combo: int = 0
+var _combo_timer: float = 0.0
+var _total_units: int = 0
+
 
 func _ready() -> void:
 	randomize()
 	spawn_followers()
 	_build_swarm_renderers()
 	_build_perf_hud()
+	_cam = player.get_node_or_null("Camera2D")
 	if perf_logging:
 		_perf_logger = preload("res://scripts/perf_logger.gd").new()
 		add_child(_perf_logger)
+
+
+func _process(delta: float) -> void:
+	# Runs at render rate (vs physics 60) so shake stays smooth at high refresh
+	if _trauma > 0.0 and _cam != null:
+		_trauma = maxf(_trauma - delta * 1.8, 0.0)
+		var s: float = _trauma * _trauma
+		_cam.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * 14.0 * s
+	elif _cam != null and _cam.offset != Vector2.ZERO:
+		_cam.offset = Vector2.ZERO
+
+	if _combo_timer > 0.0:
+		_combo_timer -= delta
+		if _combo_timer <= 0.0:
+			_combo = 0
+			_update_kills_label()
 
 
 func _build_swarm_renderers() -> void:
@@ -139,6 +180,13 @@ func _build_perf_hud() -> void:
 	_perf_label.modulate = Color(0.8, 0.9, 1.0, 0.8)
 	layer.add_child(_perf_label)
 
+	_kills_label = Label.new()
+	_kills_label.text = "Kills: 0"
+	_kills_label.position = Vector2(8.0, 26.0)
+	_kills_label.add_theme_font_size_override("font_size", 16)
+	_kills_label.modulate = Color(1.0, 0.75, 0.6)
+	layer.add_child(_kills_label)
+
 
 func _update_perf_hud(delta: float) -> void:
 	_perf_accum += delta
@@ -152,6 +200,7 @@ func _update_perf_hud(delta: float) -> void:
 
 
 func spawn_followers() -> void:
+	_total_units = follower_count
 	for i in range(follower_count):
 		var follower: Node2D = follower_scene.instantiate()
 		add_child(follower)
@@ -222,10 +271,154 @@ func _physics_process(delta: float) -> void:
 	# Push position + spring deformation of every unit into the MultiMesh
 	_update_swarm_visuals(swarm_units)
 
+	_update_enemies(swarm_units, delta)
+
 	# Track count for the perf HUD (print() here caused hitches during collect bursts)
 	var new_count: int = swarm_units.size()
 	if new_count != collected_count:
 		collected_count = new_count
+
+
+func _update_enemies(swarm_units: Array, delta: float) -> void:
+	if not enemies_enabled:
+		return
+
+	var enemies: Array = get_tree().get_nodes_in_group("enemies")
+
+	if enemies.size() < max_enemies:
+		_enemy_spawn_timer -= delta
+		if _enemy_spawn_timer <= 0.0:
+			_enemy_spawn_timer = enemy_spawn_interval
+			_spawn_enemy()
+
+	for e in enemies:
+		e.process_flock_contact(swarm_units, delta)
+
+	_resolve_enemy_collisions(swarm_units, enemies)
+
+
+# Enemies are physically real: units shove them (the ring is a flexing wall
+# that sweeps intruders along its rotation), the player is a solid body, and
+# enemies can't stack inside each other. ≤6 enemies × 100 units — no grid needed.
+const PLAYER_BODY_RADIUS := 26.0
+const ENEMY_PUSH_SHARE := 0.75    # enemy takes most of the overlap; units flex a little
+const GRIND_TRANSFER := 0.03      # fraction of unit velocity imparted per touching unit per frame
+
+func _resolve_enemy_collisions(swarm_units: Array, enemies: Array) -> void:
+	for e in enemies:
+		if not is_instance_valid(e):
+			continue
+		var e_pos: Vector2 = e.global_position
+		var er: float = e.body_radius
+
+		# vs swarm units — physical contact regardless of damage threshold
+		for u in swarm_units:
+			var d: Vector2 = e_pos - u.global_position
+			var dist: float = d.length()
+			var min_d: float = er + u.radius
+			if dist < min_d and dist > 0.001:
+				var nrm: Vector2 = d / dist
+				var overlap: float = min_d - dist
+				e_pos += nrm * overlap * ENEMY_PUSH_SHARE
+				u.global_position -= nrm * overlap * (1.0 - ENEMY_PUSH_SHARE)
+				# grind: the ring's motion carries the enemy along
+				e.apply_grind(u.vel * GRIND_TRANSFER)
+
+		# vs player — solid body, enemy is fully expelled
+		var dp: Vector2 = e_pos - player.global_position
+		var pdist: float = dp.length()
+		var pmin: float = er + PLAYER_BODY_RADIUS
+		if pdist < pmin and pdist > 0.001:
+			e_pos += (dp / pdist) * (pmin - pdist)
+
+		e.global_position = e_pos
+
+	# vs each other — no stacking into one super-blob
+	for i in range(enemies.size()):
+		for j in range(i + 1, enemies.size()):
+			var a: Node2D = enemies[i]
+			var b: Node2D = enemies[j]
+			if not is_instance_valid(a) or not is_instance_valid(b):
+				continue
+			var d2: Vector2 = b.global_position - a.global_position
+			var dist2: float = d2.length()
+			var min2: float = a.body_radius + b.body_radius
+			if dist2 < min2 and dist2 > 0.001:
+				var push: Vector2 = (d2 / dist2) * (min2 - dist2) * 0.5
+				a.global_position -= push
+				b.global_position += push
+
+
+func _spawn_enemy() -> void:
+	var e: Node2D = enemy_scene.instantiate()
+	add_child(e)
+	var a: float = randf() * TAU
+	e.global_position = player.global_position + Vector2(cos(a), sin(a)) * enemy_spawn_distance
+	e.set_target(player)
+	e.died.connect(_on_enemy_died)
+
+
+func _on_enemy_died(e) -> void:
+	kills += 1
+
+	# Combo chain: kills within the window multiply the spectacle
+	_combo = _combo + 1 if _combo_timer > 0.0 else 1
+	_combo_timer = COMBO_WINDOW
+	_update_kills_label()
+
+	var pos: Vector2 = e.global_position
+
+	# Impact feedback scales with the chain
+	add_trauma(0.3 + 0.08 * float(_combo))
+	_hit_stop()
+	_death_shockwave(pos)
+	_drop_stray(pos)
+
+
+func _update_kills_label() -> void:
+	if _combo >= 2:
+		_kills_label.text = "Kills: %d   x%d!" % [kills, _combo]
+		_kills_label.modulate = Color(2.0, 1.4, 0.8)   # blooms while the chain is alive
+	else:
+		_kills_label.text = "Kills: %d" % kills
+		_kills_label.modulate = Color(1.0, 0.75, 0.6)
+
+
+func add_trauma(amount: float) -> void:
+	_trauma = minf(_trauma + amount, 1.0)
+
+
+func _hit_stop(duration: float = 0.05, time_scale: float = 0.05) -> void:
+	# Micro-freeze on kills — makes impacts land. Timer ignores time_scale
+	# so the freeze doesn't stretch itself.
+	if Engine.time_scale < 1.0:
+		return
+	Engine.time_scale = time_scale
+	var t := get_tree().create_timer(duration, true, false, true)
+	t.timeout.connect(func(): Engine.time_scale = 1.0)
+
+
+func _death_shockwave(pos: Vector2) -> void:
+	# The kill physically blooms the murmuration outward — the flock's own
+	# springs and friction pull it back together
+	for u in get_tree().get_nodes_in_group("swarm_unit"):
+		if not is_instance_valid(u):
+			continue
+		var d: Vector2 = u.global_position - pos
+		var dist: float = d.length()
+		if dist < SHOCKWAVE_RADIUS and dist > 0.001:
+			u.vel += (d / dist) * SHOCKWAVE_POWER * (1.0 - dist / SHOCKWAVE_RADIUS)
+
+
+func _drop_stray(pos: Vector2) -> void:
+	# Kills feed the flock: each enemy leaves a stray to recruit
+	if _total_units >= MAX_TOTAL_UNITS:
+		return
+	_total_units += 1
+	var f: Node2D = follower_scene.instantiate()
+	add_child(f)
+	var a: float = randf() * TAU
+	f.global_position = pos + Vector2(cos(a), sin(a)) * randf_range(10.0, 40.0)
 
 
 func _update_swarm_follow(swarm_units: Array, delta: float) -> void:
