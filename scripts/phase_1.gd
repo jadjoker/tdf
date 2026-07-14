@@ -21,6 +21,14 @@ extends Node2D
 @export var orbit_breathe_speed: float = 1.2  # pulse speed, rad/s
 
 var follower_scene: PackedScene = preload("res://scenes/FollowerUnit.tscn")
+const _FollowerScript = preload("res://scripts/followerunit.gd")
+
+# Perf pass B: collected units are rendered by ONE MultiMesh (single draw call)
+# instead of 100 self-redrawing canvas items. Must match FollowerUnit radius (scene: 10).
+@export var unit_visual_radius: float = 10.0
+
+var _unit_mm: MultiMeshInstance2D
+var _trail_renderer: Node2D
 
 var collected_count: int = 0
 
@@ -37,10 +45,110 @@ var _was_idle: bool = false
 var _slot_count: int = -1                 # swarm size when orbit slots were last assigned
 var _breathe_time: float = 0.0
 
+var _perf_label: Label
+var _perf_accum: float = 0.0
+
+# Per-frame CSV logging for offline analysis (scripts/perf_logger.gd)
+@export var perf_logging: bool = true
+var _perf_logger: Node = null
+
 
 func _ready() -> void:
 	randomize()
 	spawn_followers()
+	_build_swarm_renderers()
+	_build_perf_hud()
+	if perf_logging:
+		_perf_logger = preload("res://scripts/perf_logger.gd").new()
+		add_child(_perf_logger)
+
+
+func _build_swarm_renderers() -> void:
+	_trail_renderer = preload("res://scripts/trail_renderer.gd").new()
+	_trail_renderer.name = "TrailRenderer"
+	add_child(_trail_renderer)
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	var quad := QuadMesh.new()
+	# The baked texture's body circle fills 82% of the quad (margin for rim + AA)
+	var world_size: float = unit_visual_radius * 2.0 / 0.82
+	quad.size = Vector2(world_size, world_size)
+	mm.mesh = quad
+	mm.instance_count = follower_count + 8   # headroom for scene-placed units
+	mm.visible_instance_count = 0
+
+	_unit_mm = MultiMeshInstance2D.new()
+	_unit_mm.name = "SwarmBodies"
+	_unit_mm.multimesh = mm
+	_unit_mm.texture = _bake_unit_texture()
+	add_child(_unit_mm)
+
+
+func _bake_unit_texture(px: int = 96) -> ImageTexture:
+	# Rasterize the unit's vector look ONCE at ~5x display size, in float format
+	# so the HDR palette survives and blooms. One-time cost at startup.
+	var img := Image.create(px, px, false, Image.FORMAT_RGBAF)
+	var half: float = float(px) * 0.5
+	var body_r: float = half * 0.82
+	var aa: float = 2.0                       # anti-alias falloff in texture pixels
+	var rim_w: float = body_r * 0.15
+	var hi_center := Vector2(-body_r * 0.25, -body_r * 0.28)
+	var hi_r: float = body_r * 0.42
+
+	var body_c: Color = _FollowerScript.COLOR_SWARM
+	var rim_c: Color = _FollowerScript.RIM_SWARM
+	var hi_c: Color = _FollowerScript.HIGHLIGHT_SWARM
+
+	for y in range(px):
+		for x in range(px):
+			var p := Vector2(float(x) - half + 0.5, float(y) - half + 0.5)
+			var d: float = p.length()
+			var body_a: float = clampf((body_r - d) / aa, 0.0, 1.0)
+			if body_a <= 0.0:
+				continue   # image starts fully transparent
+			var col := Color(body_c.r, body_c.g, body_c.b, 1.0)
+			# Off-center highlight
+			var hi_t: float = clampf((hi_r - (p - hi_center).length()) / (aa * 2.0), 0.0, 1.0) * hi_c.a
+			col = col.lerp(Color(hi_c.r, hi_c.g, hi_c.b, 1.0), hi_t)
+			# Bright rim at the edge
+			var rim_t: float = clampf((d - (body_r - rim_w - aa)) / aa, 0.0, 1.0)
+			col = col.lerp(Color(rim_c.r, rim_c.g, rim_c.b, 1.0), rim_t)
+			col.a = body_a
+			img.set_pixel(x, y, col)
+
+	return ImageTexture.create_from_image(img)
+
+
+func _update_swarm_visuals(swarm_units: Array) -> void:
+	var mm: MultiMesh = _unit_mm.multimesh
+	var n: int = swarm_units.size()
+	if mm.instance_count < n:
+		mm.instance_count = n + 16
+	mm.visible_instance_count = n
+	for i in range(n):
+		mm.set_instance_transform_2d(i, swarm_units[i].visual_transform())
+
+
+func _build_perf_hud() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_perf_label = Label.new()
+	_perf_label.position = Vector2(8.0, 6.0)
+	_perf_label.add_theme_font_size_override("font_size", 13)
+	_perf_label.modulate = Color(0.8, 0.9, 1.0, 0.8)
+	layer.add_child(_perf_label)
+
+
+func _update_perf_hud(delta: float) -> void:
+	_perf_accum += delta
+	if _perf_accum < 0.25:
+		return
+	_perf_accum = 0.0
+	var fps: float = Performance.get_monitor(Performance.TIME_FPS)
+	var frame_ms: float = 1000.0 / max(fps, 1.0)
+	var phys_ms: float = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	_perf_label.text = "FPS %d  |  frame %.1f ms  |  physics %.1f ms  |  swarm %d" % [int(fps), frame_ms, phys_ms, collected_count]
 
 
 func spawn_followers() -> void:
@@ -57,6 +165,8 @@ func spawn_followers() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_perf_hud(delta)
+
 	if player == null:
 		return
 
@@ -86,24 +196,36 @@ func _physics_process(delta: float) -> void:
 		_idle_time = 0.0
 	var is_idle: bool = _idle_time >= orbit_engage_delay
 
+	var slots_reassigned := false
+	var t_sim: int = Time.get_ticks_usec()
+
 	if is_idle:
 		# (Re)assign ring slots by current angle when orbit starts or the swarm changes size,
 		# so every unit slides into its nearest gap instead of cutting across the ring
 		if not _was_idle or swarm_units.size() != _slot_count:
 			_assign_orbit_slots(swarm_units)
+			slots_reassigned = true
 		_update_orbit(swarm_units, delta)
 	else:
 		_update_swarm_follow(swarm_units, delta)
 	_was_idle = is_idle
 
+	var t_sep: int = Time.get_ticks_usec()
+
 	# Soft collision resolution (keeps blob from overlapping too much)
 	resolve_collisions(swarm_units)
 
-	# Update count (for debugging / future UI)
+	if _perf_logger != null:
+		var t_end: int = Time.get_ticks_usec()
+		_perf_logger.record(swarm_units.size(), t_sep - t_sim, t_end - t_sep, slots_reassigned)
+
+	# Push position + spring deformation of every unit into the MultiMesh
+	_update_swarm_visuals(swarm_units)
+
+	# Track count for the perf HUD (print() here caused hitches during collect bursts)
 	var new_count: int = swarm_units.size()
 	if new_count != collected_count:
 		collected_count = new_count
-		print("Collected units:", collected_count)
 
 
 func _update_swarm_follow(swarm_units: Array, delta: float) -> void:
@@ -187,39 +309,86 @@ func _update_orbit(swarm_units: Array, delta: float) -> void:
 		u.global_position = pos
 
 
+# Forward-neighbor cells only (E, S, SE, SW) so every pair is tested exactly once
+const _SEP_NEIGHBORS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(-1, 1)]
+
+
 func resolve_collisions(particles: Array) -> void:
 	var n: int = particles.size()
+	if n < 2:
+		return
+
+	# Read node state into local arrays ONCE — repeated cross-object property
+	# access is the dominant GDScript cost once pair counts grow
+	var pos: PackedVector2Array = PackedVector2Array()
+	pos.resize(n)
+	var rad: PackedFloat32Array = PackedFloat32Array()
+	rad.resize(n)
+	var moved: Array = []
+	moved.resize(n)
+	var max_r: float = 1.0
 	for i in range(n):
-		for j in range(i + 1, n):
-			var a = particles[i]
-			var b = particles[j]
+		var p = particles[i]
+		pos[i] = p.global_position
+		rad[i] = p.radius
+		if p.radius > max_r:
+			max_r = p.radius
+		moved[i] = false
 
-			var pa: Vector2 = a.global_position
-			var pb: Vector2 = b.global_position
+	# Spatial hash: two overlapping units are always within one cell of each
+	# other (cell = max possible touch distance), so only same-cell and
+	# forward-neighbor pairs need testing — O(n·k) instead of O(n²)
+	var cell_size: float = max_r * 2.0
+	var grid: Dictionary = {}
+	for i in range(n):
+		var key: Vector2i = Vector2i(floori(pos[i].x / cell_size), floori(pos[i].y / cell_size))
+		if grid.has(key):
+			grid[key].append(i)
+		else:
+			grid[key] = [i]
 
-			var dx: float = pb.x - pa.x
-			var dy: float = pb.y - pa.y
-			var dist_sq: float = dx * dx + dy * dy
+	for key in grid:
+		var bucket: Array = grid[key]
+		var bn: int = bucket.size()
+		for a_i in range(bn):
+			for b_i in range(a_i + 1, bn):
+				_resolve_pair(bucket[a_i], bucket[b_i], pos, rad, moved)
+		for off in _SEP_NEIGHBORS:
+			var nkey: Vector2i = key + off
+			if not grid.has(nkey):
+				continue
+			var nbucket: Array = grid[nkey]
+			for a_i in range(bn):
+				for b_i in range(nbucket.size()):
+					_resolve_pair(bucket[a_i], nbucket[b_i], pos, rad, moved)
 
-			var min_dist: float = a.radius + b.radius
+	# Write back only the nodes that actually moved
+	for i in range(n):
+		if moved[i]:
+			particles[i].global_position = pos[i]
 
-			if dist_sq == 0.0:
-				# Prevent NaNs by giving a tiny random offset
-				dx = randf_range(-0.01, 0.01)
-				dy = randf_range(-0.01, 0.01)
-				dist_sq = dx * dx + dy * dy
 
-			if dist_sq < min_dist * min_dist:
-				var dist: float = sqrt(dist_sq)
-				var nx: float = dx / dist
-				var ny: float = dy / dist
-				var overlap: float = (min_dist - dist) * collision_push
+func _resolve_pair(i: int, j: int, pos: PackedVector2Array, rad: PackedFloat32Array, moved: Array) -> void:
+	var dx: float = pos[j].x - pos[i].x
+	var dy: float = pos[j].y - pos[i].y
+	var dist_sq: float = dx * dx + dy * dy
 
-				# Push each unit half the overlap apart
-				pa.x -= nx * (overlap * 0.5)
-				pa.y -= ny * (overlap * 0.5)
-				pb.x += nx * (overlap * 0.5)
-				pb.y += ny * (overlap * 0.5)
+	var min_dist: float = rad[i] + rad[j]
 
-				a.global_position = pa
-				b.global_position = pb
+	if dist_sq == 0.0:
+		# Prevent NaNs by giving a tiny random offset
+		dx = randf_range(-0.01, 0.01)
+		dy = randf_range(-0.01, 0.01)
+		dist_sq = dx * dx + dy * dy
+
+	if dist_sq < min_dist * min_dist:
+		var dist: float = sqrt(dist_sq)
+		var nx: float = dx / dist
+		var ny: float = dy / dist
+		var overlap: float = (min_dist - dist) * collision_push
+
+		# Push each unit half the overlap apart
+		pos[i] += Vector2(-nx * overlap * 0.5, -ny * overlap * 0.5)
+		pos[j] += Vector2(nx * overlap * 0.5, ny * overlap * 0.5)
+		moved[i] = true
+		moved[j] = true

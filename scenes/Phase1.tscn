@@ -1,13 +1,28 @@
-[gd_scene load_steps=4 format=3 uid="uid://b6ac3dvtsqkhi"]
+[gd_scene load_steps=6 format=3 uid="uid://b6ac3dvtsqkhi"]
 
 [ext_resource type="PackedScene" uid="uid://c1tv7sh701vhc" path="res://scenes/Player.tscn" id="1_0dg7t"]
 [ext_resource type="Script" uid="uid://crl7vtpg0o0qf" path="res://scripts/phase_1.gd" id="1_wwqg3"]
 [ext_resource type="PackedScene" uid="uid://cyhxmwjpqq5at" path="res://scenes/FollowerUnit.tscn" id="2_4fcp5"]
+[ext_resource type="Script" path="res://scripts/grid_background.gd" id="4_grid1"]
+
+[sub_resource type="Environment" id="Environment_glow1"]
+glow_enabled = true
+glow_intensity = 1.0
+glow_strength = 1.05
+glow_bloom = 0.05
+glow_blend_mode = 1
+glow_hdr_threshold = 1.1
 
 [node name="Phase1" type="Node2D"]
 script = ExtResource("1_wwqg3")
 follower_count = 100
 collision_push = 0.5
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_glow1")
+
+[node name="GridBackground" type="Node2D" parent="."]
+script = ExtResource("4_grid1")
 
 [node name="Player" parent="." instance=ExtResource("1_0dg7t")]
 position = Vector2(585, 320)

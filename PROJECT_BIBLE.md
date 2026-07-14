@@ -14,6 +14,12 @@
 | Jul 2026 | Promoted to main focus — this movement is the favorite across all projects |
 | Jul 2026 | Direction set: **stay a sandbox, polish the feel**. (A shepherd-tower-defense concept was drafted and parked — see Parked Ideas.) |
 | Jul 2026 | Feel pass #1: comet-tail follow targets, angular orbit slot assignment (no more cross-ring churn), smoothed mode switching with engage delay, ring breathing, per-unit stat variation |
+| Jul 2026 | Graphics pass #1 — **neon bloom look**: HDR 2D + glow WorldEnvironment, dark background with world grid, additive motion trails per unit, velocity squash-and-stretch, dim-stray → neon-mint-swarm color language, bright HDR player |
+| Jul 2026 | Graphics pass #2 — **player ball rebuilt as vector**: pixelated placeholder sprite replaced with anti-aliased `_draw()` layers (HDR core, bright rim, off-center highlight, pulsing halo, velocity lean) in player.gd |
+| Jul 2026 | Player squash & stretch upgraded to **damped-spring physics** with smooth axis chasing; fixed screen-space-scale bug in `draw_set_transform()` (deformation was pinned to screen X) |
+| Jul 2026 | Graphics pass #3 — **collectables rebuilt as vector** with the same spring squash/stretch system as the player (per-unit randomized stiffness so wobbles desync); placeholder PNG no longer used anywhere |
+| Jul 2026 | Perf pass A (lag at 100 collected units): spatial-hash separation with cached arrays, physics retired on collect, trails throttled to 30 Hz, debug prints removed, perf HUD added |
+| Jul 2026 | Perf pass B (profiler data showed render side scaling ~8→19ms with swarm size): swarm bodies drawn by **one MultiMesh** (vector look baked to HDR texture at startup), all trails drawn by **one shared TrailRenderer**; per-unit canvas redraw eliminated. Spring/deform physics unchanged. |
 
 ---
 
@@ -26,8 +32,8 @@ The follower system in `scripts/phase_1.gd`. Two modes, switched by measured pla
   Creates the surging, liquid trail.
 - **Orbit (idle):** units take evenly spaced slots on a rotating ring around the player;
   velocities lerp-steered so transitions stay smooth.
-- **Soft separation:** O(n²) pairwise overlap push with NaN guard keeps the blob
-  from collapsing into a point.
+- **Soft separation:** pairwise overlap push with NaN guard keeps the blob from
+  collapsing into a point (spatial-hashed since perf pass A — same behavior, O(n·k)).
 
 Any change must preserve this feel. Tune via exports, not hardcoded numbers.
 
@@ -78,6 +84,28 @@ All tunable in the Inspector (Phase1 node unless noted). Feel pass #1 knobs mark
 
 ---
 
+## Graphics Pass #1 — the neon bloom look
+
+Principle: **no art assets, just light**. Everything below is engine settings + code.
+
+| Piece | Where | Notes |
+|---|---|---|
+| HDR 2D + dark clear color | `project.godot` `[rendering]` | `viewport/hdr_2d=true` is required for 2D glow; near-black navy background |
+| Glow | WorldEnvironment in Phase1.tscn | intensity 1.0, strength 1.05, bloom 0.05, blend Screen, threshold 1.1 — only HDR colors (>1.0 channels) bloom |
+| World grid | `scripts/grid_background.gd` | static world-space grid (cell 120, extent ±3000, z_index −10) so speed is readable |
+| Color language | `followerunit.gd` constants | `COLOR_STRAY` dim gray-blue (waiting) → `COLOR_SWARM` neon mint `(0.55, 2.4, 1.3)` HDR (glows); player is HDR magenta-white |
+| Motion trails | `followerunit.gd` `_make_trail()` | per-unit Line2D, 12 points, world-space (`top_level`), gradient fade, **additive blend** — trails stack where the swarm flows |
+| Unit bodies (pass #3) | strays: `followerunit.gd` `_draw()`; swarm: baked texture on `SwarmBodies` MultiMesh | vector circles at `radius` (10 via scene — matches separation spacing exactly): body + off-center highlight + rim. Stray palette drawn per-node (static); swarm palette baked into the shared HDR texture (perf pass B) |
+| Unit squash & stretch | `followerunit.gd` `_process()` | same damped-spring system as the player (`STRETCH_MAX` 0.8, stiffness 170 ±15% per unit, damping 11, axis chase 16) — springs toward speed target, wobbles on stops, desynced across the swarm |
+| Player ball (pass #2) | `player.gd` `_draw()` constants | no sprite — anti-aliased vector circles: HDR core (radius 24), crisp rim, off-center highlight, 3-layer pulsing halo. Crisp at any zoom. |
+| Spring squash & stretch | `player.gd` `_process()` | stretch is a **damped spring** (`STRETCH_STIFFNESS` 140, `STRETCH_DAMPING` 12, underdamped) toward the speed target — launches overshoot, hard stops squash below neutral and jiggle back. Deformation axis (`_axis_angle`) chases the motion direction at `AXIS_TURN_RATE` and is held on stop. Stretch clamped 0.6–1.6. **Gotcha:** `draw_set_transform()` scales in screen space (post-rotation) — deformation must use `draw_set_transform_matrix()` with `Transform2D(rot, scale, skew, pos)` or the squash pins to the screen X axis. |
+
+Tuning: bloom intensity/threshold on the WorldEnvironment node; trail length/alpha and
+stretch amount are constants at the top of `followerunit.gd`. To kill the whole look,
+disable glow on the WorldEnvironment and set `STRETCH_MAX` to 0 / skip `_make_trail()`.
+
+---
+
 ## File Structure
 
 ```
@@ -85,7 +113,7 @@ towerdefense/
 ├── project.godot            — 4.4, WASD input map, main scene = main.tscn
 ├── PROJECT_BIBLE.md         — this file
 ├── main.tscn                — root (Main → Phase1 instance)
-├── assets/                  — follower_circle_placeholder.png
+├── assets/                  — follower_circle_placeholder.png (unused since graphics pass #3 — everything is vector-drawn)
 ├── scenes/
 │   ├── Phase1.tscn          — sandbox orchestrator (follower_count=100, collision_push=0.5)
 │   ├── Player.tscn          — CharacterBody2D + Camera2D, group "player", speed 500
@@ -93,10 +121,55 @@ towerdefense/
 ├── scripts/
 │   ├── main.gd              — empty stub
 │   ├── player.gd            — WASD move_and_slide
-│   ├── followerunit.gd      — pickup logic, per-unit physics params + variation
-│   └── phase_1.gd           — THE movement system (sacred)
+│   ├── followerunit.gd      — pickup logic, per-unit params/variation, spring deform, palette
+│   ├── grid_background.gd   — world-space grid backdrop
+│   ├── trail_renderer.gd    — ALL swarm trails in one canvas item (perf pass B)
+│   ├── perf_logger.gd       — buffered per-frame CSV profiler (toggle on Phase1)
+│   └── phase_1.gd           — THE movement system (sacred) + MultiMesh body renderer
 └── git_helper.py / .bat     — custom git convenience tooling
 ```
+
+---
+
+## Performance Strategy
+
+**Budget:** 60 fps with a full swarm. Watch the perf HUD (top-left: FPS, frame ms,
+physics ms, swarm count) — measure before optimizing further.
+
+**Data collection:** `scripts/perf_logger.gd` (toggle: `perf_logging` export on Phase1,
+default on) writes buffered per-frame CSVs to
+`%APPDATA%\Godot\app_userdata\TowerDefense\perf_logs\` — columns: t_ms, units, fps,
+process_ms, physics_ms, sim_us (follow/orbit section), sep_us (separation section),
+slots_reassigned. Play a session, then analyze offline (percentiles + spike correlation).
+
+### Phase A — done (Jul 2026), targets ~100–250 units
+1. **Spatial-hash separation** — `resolve_collisions` buckets units into a grid
+   (cell = max touch distance) and only tests same-cell + forward-neighbor pairs:
+   ~4,950 pair checks at n=100 → a few hundred. Node state is read into packed local
+   arrays once and written back only for moved units, because *cross-object property
+   access is the dominant GDScript cost* — the O(n²) loop was doing ~30k of them per frame.
+2. **Physics retirement on collect** — a collected unit's Area2D job is over; monitoring,
+   monitorable, and both collision masks are zeroed so the broadphase stops tracking it.
+3. **Trail throttling** — Line2D points recorded at 30 Hz with random per-unit phase,
+   8 points (~0.27s). Halves tessellation cost, spreads it across frames.
+4. **No prints in hot paths** — collect-burst `print()` calls caused visible hitches;
+   the perf HUD replaces them.
+
+### Phase B — built Jul 2026 (profiler data: render side scaled ~8→19ms over 0→100 units)
+- ✅ **MultiMesh bodies**: collected units render via one `MultiMeshInstance2D`
+  (`SwarmBodies` under Phase1) — single draw call, per-instance `Transform2D` carries
+  position + spring deformation (`FollowerUnit.visual_transform()`). The vector look is
+  baked once at startup into a 96px FORMAT_RGBAF texture (`_bake_unit_texture`) so HDR
+  bloom survives. Strays still `_draw()` themselves — they're static, so it costs one
+  draw ever. Units keep their spring `_process` (measured cheap) but never `queue_redraw`.
+- ✅ **Shared TrailRenderer** (`scripts/trail_renderer.gd`): one node owns every trail's
+  ring buffer and draws all of them with `draw_polyline_colors` in a single `_draw()` —
+  replaces 100 Line2D nodes. Self-syncs with the `swarm_unit` group, 30 Hz staggered.
+
+### Phase C — if it's ever needed
+- Reuse the Phase A spatial grid for future neighbor queries (boids alignment, combat).
+- If simulation math itself becomes the wall: C# or GDExtension for the integration
+  loop — but profile first; current architecture should reach ~1,000 units.
 
 ---
 
@@ -111,8 +184,8 @@ towerdefense/
 - **Visual trails** — per-unit ghosting or Line2D trails; would make the flow readable.
 - **Controller input** — analog stick movement (feel test on gamepad).
 - **Two-ring orbit** — big swarms split into inner/outer counter-rotating rings.
-- **Spatial hashing** — only needed if unit counts push past ~300 (O(n²) separation).
-- **Sandbox HUD** — on-screen sliders/keys to tune knobs live without the Inspector.
+- **Sandbox HUD** — on-screen sliders/keys to tune knobs live without the Inspector
+  (perf HUD already exists; this would add tuning).
 
 ---
 
