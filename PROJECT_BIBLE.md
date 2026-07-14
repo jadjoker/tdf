@@ -1,4 +1,6 @@
-# tdf — Movement Sandbox Bible
+# MURMURATION — Project Bible
+
+> Working folder/repo: `towerdefense` / `jadjoker/tdf` (historical names — the game is **Murmuration**)
 
 > Single source of truth. Update after every meaningful decision.
 > Feel-first project: the swarm movement IS the game. Gameplay direction decided
@@ -190,6 +192,57 @@ pickup economy. Defense and offense are the same verb: moving well.
 ### Parked (recorded, not the direction)
 - Shepherd tower defense (base + waves — may return as G5+ structure)
 - Comet courier / gauntlet levels (could be a bonus mode)
+
+---
+
+## Road to Steam (goal set Jul 2026: real commercial release)
+
+**Goal:** ship a genuinely good, paid game on Steam. Solo dev, part-time,
+scope-small-polish-hard (same principle as Swarm Director's bible).
+
+### Positioning & market honesty
+- **Genre shelf:** one-mechanic arcade action roguelite — sits near Vampire
+  Survivors-likes, Nova Drift, Geometry Wars. Healthy niche, buyer expectation
+  ~$4.99–$9.99, high tolerance for abstract visuals, LOW tolerance for thin content.
+- **The hook (marketing = the game):** "lead a murmuration; your flock is your health
+  bar AND your weapon." Every whip-crack kill is a 5-second clip. Short-form video
+  (TikTok/Shorts/Twitter GIFs) is the primary channel — this game demos itself.
+- **Honest math:** median indie games earn very little. What moves the needle:
+  a free demo, Steam Next Fest, and wishlists (several thousand at launch for the
+  algorithm to notice). Plan the demo as a first-class product, not an afterthought.
+- **Name LOCKED (Jul 2026): MURMURATION.** "Murmur" was rejected after a Steam
+  search check found an exact-title collision ([ MURMUR ], Oct 2025 horror game)
+  plus two other murmur-titled games; "Murmuration" came back clean and names the
+  core fantasy. TODO: grab itch.io page + domain + social handles.
+- **Timeline commitment:** 6–12 months of development (stated Jul 2026) — v1.0 can
+  be deep: full enemy roster, physics toys (gravity wells, tank), unlock track,
+  maybe the courier-gauntlet as a bonus mode. Don't let scope eat the polish.
+
+### Production milestones (v-numbers ship in this order)
+- **v0.2 — a game exists:** G2 stakes (stragglers eaten, game over) + G3 economy +
+  G4 enemy variety (chaser/interceptor/armored/tank) + G5 run structure
+  (waves, score, difficulty curve, death screen with stats)
+- **v0.3 — a run matters:** in-run upgrade choices (survivors-like pick-3),
+  unlock track across runs, endless + timed modes
+- **v0.4 — shippable shell:** audio (biggest missing juice channel), main menu,
+  pause, settings (volume/fullscreen/vsync), rebindable keys, controller + Steam Deck
+  support (pointer steering already covers touch)
+- **v0.5 — DEMO build:** first 10 minutes, polished to death; this is the marketing
+- **v1.0 — launch:** 3–5 hours of content depth, achievements, launch discount
+
+### Steamworks logistics checklist
+- [ ] Steamworks account + $100 app fee (recoupable after $1k revenue)
+- [ ] Tax interview + bank info (needed before the page can go live)
+- [ ] Store page: capsule art (the ONE paid-artist purchase worth making),
+      6+ screenshots, 30s trailer cut from gameplay GIF moments
+- [ ] Page live ASAP once v0.3 exists — wishlists accrue while you build
+- [ ] Steam requires ~2 weeks "Coming Soon" minimum before launch; page and
+      build each go through human review (days, not hours)
+- [ ] Next Fest (one-time per game) timed for ~1–2 months pre-launch with the demo
+- [ ] Price: $4.99 launch (raiseable later) or $6.99 if v1.0 content is deep
+- **Legit-ness:** all code/art is original & procedural (no asset-pack or license
+  risk); keep it that way or track licenses for any audio you bring in
+  (freesound CC0 / paid packs with commercial rights only).
 
 ---
 
