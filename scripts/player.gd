@@ -79,5 +79,14 @@ func _physics_process(_delta: float) -> void:
 	if input_dir.length() > 1.0:
 		input_dir = input_dir.normalized()
 
+	# Pointer steering: hold left mouse (or touch — emulated as mouse) to drive
+	# toward the cursor. Speed eases in near the pointer for fine control.
+	# Keyboard input always wins if both are active.
+	if input_dir == Vector2.ZERO and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		var to_pointer: Vector2 = get_global_mouse_position() - global_position
+		var dist: float = to_pointer.length()
+		if dist > 12.0:
+			input_dir = (to_pointer / dist) * clampf((dist - 12.0) / 80.0, 0.0, 1.0)
+
 	velocity = input_dir * move_speed
 	move_and_slide()

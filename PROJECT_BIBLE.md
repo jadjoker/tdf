@@ -113,7 +113,8 @@ disable glow on the WorldEnvironment and set `STRETCH_MAX` to 0 / skip `_make_tr
 
 ```
 towerdefense/
-├── project.godot            — 4.4, WASD input map, main scene = main.tscn
+├── project.godot            — 4.4, input map (WASD + arrows), main scene = main.tscn
+│                              movement also via hold-LMB/touch pointer steering (player.gd)
 ├── PROJECT_BIBLE.md         — this file
 ├── main.tscn                — root (Main → Phase1 instance)
 ├── assets/                  — follower_circle_placeholder.png (unused since graphics pass #3 — everything is vector-drawn)
