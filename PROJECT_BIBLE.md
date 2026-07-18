@@ -24,6 +24,7 @@
 | Jul 2026 | Perf pass A (lag at 100 collected units): spatial-hash separation with cached arrays, physics retired on collect, trails throttled to 30 Hz, debug prints removed, perf HUD added |
 | Jul 2026 | Perf pass B (profiler data showed render side scaling ~8→19ms with swarm size): swarm bodies drawn by **one MultiMesh** (vector look baked to HDR texture at startup), all trails drawn by **one shared TrailRenderer**; per-unit canvas redraw eliminated. Spring/deform physics unchanged. |
 | Jul 2026 | **Gameplay decided: momentum combat** ("crack the whip" + "the flock is your health bar" fused). **G1 built** — velocity-scaled contact damage on dumb chaser enemies, hit flash/knockback/death burst, trickle spawner, kill counter |
+| Jul 2026 | **Graphics pass #4 — full UI pass** (screenshot-verified via `tools/screenshot_tool.gd`): shared neon style library (`ui_style.gd` — HDR accent borders that bloom on hover/focus), upgrade cards rebuilt with per-upgrade accent colors + procedural vector icons (`upgrade_icon.gd`) + staggered rise-in tween, styled pause/game-over panels, HUD outlines, vignette shader on every screen, menu restyle. Fixes found by LOOKING: center-anchor ordering bug (~110px off), stray palette (gray bubbles → dim mint embers), player core HDR clipping, flock now spawns around the player |
 | Jul 2026 | **Physics-juice pass**: enemies physically real (shoved by units, ring grinds/carries them, solid player, no enemy stacking), jelly impact deformation on enemies, death shockwaves ripple the flock, hit-stop micro-freeze, trauma camera shake, whip-crack sparks, combo chains, kills drop recruitable strays (cap 250) |
 
 ---
@@ -108,6 +109,16 @@ Principle: **no art assets, just light**. Everything below is engine settings + 
 Tuning: bloom intensity/threshold on the WorldEnvironment node; trail length/alpha and
 stretch amount are constants at the top of `followerunit.gd`. To kill the whole look,
 disable glow on the WorldEnvironment and set `STRETCH_MAX` to 0 / skip `_make_trail()`.
+
+### UI look (graphics pass #4)
+
+| Piece | Where | Notes |
+|---|---|---|
+| Style library | `scripts/ui_style.gd` | StyleBoxFlat recipes: dark translucent panels, thin accent borders that switch to HDR on hover/focus (bloom = affordance). `MINT`/`GOLD`/`VIOLET` shared accents. `centered_panel()` = anchors-center + grow-both. |
+| Upgrade cards | `phase_1._show_upgrade_choice` | per-upgrade accent color from `UPGRADE_POOL`, procedural icon (`upgrade_icon.gd`), name/desc/key-hint stack, staggered rise+fade tween (pause-immune) |
+| Vignette | `ui_style.add_vignette()` | tiny canvas_item shader, radial darkening; on gameplay (0.34), menus (0.4), overlays (0.5+) |
+| HUD | phase_1 `_build_perf_hud` | outlined game HUD top-left; dev perf readout bottom-left, small + dim |
+| Screenshot review loop | `tools/screenshot_tool.gd` | `godot --script tools/screenshot_tool.gd -- <scene> <out.png> [upgrade\|gameover\|pause]` — capture any screen, LOOK at it, iterate. **Center-anchor gotcha:** set a Control's `size` BEFORE `set_anchors_and_offsets_preset(PRESET_CENTER, KEEP_SIZE)` or it centers the pre-size min-width (~110px drift). |
 
 ---
 

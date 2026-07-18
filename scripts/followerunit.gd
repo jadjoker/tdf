@@ -17,11 +17,13 @@ var follow_offset_norm: Vector2 = Vector2.ZERO # persistent unit offset (unit di
 # Palette — values above 1.0 are HDR and bloom under the glow environment.
 # Collected units are RENDERED BY PHASE1'S MULTIMESH (perf pass B), which bakes
 # the swarm palette into a shared texture; only strays draw themselves (once).
-const COLOR_STRAY := Color(0.45, 0.55, 0.65, 0.9)
+# Strays are unlit embers of the swarm palette — clearly the same species,
+# clearly waiting to be lit (screenshot review: gray-blue read as dull bubbles)
+const COLOR_STRAY := Color(0.16, 0.34, 0.26, 1.0)
 const COLOR_SWARM := Color(0.55, 2.40, 1.30, 1.0)
-const RIM_STRAY := Color(0.55, 0.65, 0.75, 0.9)
+const RIM_STRAY := Color(0.38, 0.85, 0.58, 1.0)
 const RIM_SWARM := Color(0.90, 3.00, 1.80, 1.0)
-const HIGHLIGHT_STRAY := Color(0.70, 0.80, 0.90, 0.25)
+const HIGHLIGHT_STRAY := Color(0.45, 0.90, 0.65, 0.30)
 const HIGHLIGHT_SWARM := Color(1.40, 2.80, 2.00, 0.30)
 
 # Spring-driven squash & stretch (same system as the player ball)

@@ -5,9 +5,11 @@ extends CharacterBody2D
 # Drawn visual (no sprite) — crisp anti-aliased edges at any zoom,
 # HDR colors bloom under the glow environment
 const CORE_RADIUS := 24.0
-const CORE_COLOR := Color(2.2, 1.5, 2.6)          # HDR magenta-white body
-const RIM_COLOR := Color(3.0, 2.2, 3.4)           # brighter rim, blooms hard
-const HIGHLIGHT_COLOR := Color(2.8, 2.4, 3.0, 0.35)
+# Screenshot review: 2.2+ core clipped to a featureless white disk — keep the
+# body just under full bloom so the magenta identity survives, rim carries the glow
+const CORE_COLOR := Color(1.55, 1.05, 1.85)       # magenta body, tinted not clipped
+const RIM_COLOR := Color(2.6, 1.8, 3.0)           # bright rim, blooms hard
+const HIGHLIGHT_COLOR := Color(2.2, 1.9, 2.4, 0.4)
 const HALO_COLOR := Color(1.2, 0.7, 1.5, 0.10)    # soft light spill
 
 # Squash & stretch driven by a damped spring, not mapped directly from speed:

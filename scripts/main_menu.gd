@@ -5,14 +5,16 @@ extends Node2D
 # Settings persist to user://save.cfg [settings] via game_settings.gd.
 
 const GS = preload("res://scripts/game_settings.gd")
+const UIS = preload("res://scripts/ui_style.gd")
 const _FollowerScript = preload("res://scripts/followerunit.gd")
 
 const AMBIENT_COUNT := 56
 
 var _t: float = 0.0
 var _menu_box: VBoxContainer
-var _settings_box: VBoxContainer
+var _settings_panel: PanelContainer
 var _begin_btn: Button
+var _title: Label
 
 
 func _ready() -> void:
@@ -40,6 +42,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	# Title breathes gently in the bloom
+	if _title != null:
+		var pulse: float = 1.0 + sin(_t * 1.3) * 0.10
+		_title.modulate = Color(0.6 * pulse, 2.6 * pulse, 1.5 * pulse)
 	queue_redraw()
 
 
@@ -60,25 +66,29 @@ func _draw() -> void:
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	UIS.add_vignette(layer, 0.4)
 
-	var title := Label.new()
-	title.text = "MURMURATION"
-	title.add_theme_font_size_override("font_size", 64)
-	title.modulate = Color(0.6, 2.6, 1.5)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	title.size = Vector2(900.0, 80.0)
-	title.position += Vector2(-450.0, -220.0)
-	layer.add_child(title)
+	_title = Label.new()
+	_title.text = "MURMURATION"
+	_title.add_theme_font_size_override("font_size", 64)
+	_title.modulate = Color(0.6, 2.6, 1.5)
+	UIS.outline(_title, 10)
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# NOTE: size BEFORE the center preset, or the anchor math centers the
+	# label's pre-size min-width and everything lands ~100px off-center
+	_title.size = Vector2(900.0, 80.0)
+	_title.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+	_title.position += Vector2(0.0, -220.0)
+	layer.add_child(_title)
 
 	var tag := Label.new()
 	tag.text = "lead the flock  ·  crack the whip"
 	tag.add_theme_font_size_override("font_size", 17)
 	tag.modulate = Color(0.7, 0.8, 0.9, 0.85)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	tag.size = Vector2(900.0, 26.0)
-	tag.position += Vector2(-450.0, -150.0)
+	tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+	tag.position += Vector2(0.0, -128.0)
 	layer.add_child(tag)
 
 	# Best-run line from save
@@ -91,9 +101,9 @@ func _build_ui() -> void:
 		best.add_theme_font_size_override("font_size", 14)
 		best.modulate = Color(2.0, 1.6, 0.8, 0.9)
 		best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		best.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		best.size = Vector2(900.0, 22.0)
-		best.position += Vector2(-450.0, -118.0)
+		best.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+		best.position += Vector2(0.0, -98.0)
 		layer.add_child(best)
 
 	# Main buttons
@@ -110,17 +120,26 @@ func _build_ui() -> void:
 	_begin_btn.grab_focus()   # controller/keyboard navigation works out of the box
 
 	# Settings panel (hidden until opened)
-	_settings_box = VBoxContainer.new()
-	_settings_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_settings_box.size = Vector2(340.0, 240.0)
-	_settings_box.position += Vector2(-170.0, -60.0)
-	_settings_box.add_theme_constant_override("separation", 12)
-	_settings_box.visible = false
-	layer.add_child(_settings_box)
+	_settings_panel = UIS.centered_panel(UIS.MINT)
+	_settings_panel.visible = false
+	layer.add_child(_settings_panel)
+
+	var settings_box := VBoxContainer.new()
+	settings_box.add_theme_constant_override("separation", 14)
+	settings_box.custom_minimum_size = Vector2(340.0, 0.0)
+	_settings_panel.add_child(settings_box)
+
+	var st_title := Label.new()
+	st_title.text = "SETTINGS"
+	st_title.add_theme_font_size_override("font_size", 24)
+	st_title.modulate = UIS.MINT
+	st_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	settings_box.add_child(st_title)
 
 	var vol_label := Label.new()
 	vol_label.text = "Volume"
-	_settings_box.add_child(vol_label)
+	vol_label.modulate = UIS.TEXT
+	settings_box.add_child(vol_label)
 
 	var vol := HSlider.new()
 	vol.min_value = 0.0
@@ -128,32 +147,36 @@ func _build_ui() -> void:
 	vol.step = 0.05
 	vol.value = cfg.get_value("settings", "volume", 1.0)
 	vol.custom_minimum_size = Vector2(320.0, 24.0)
+	UIS.style_slider(vol, UIS.MINT)
 	vol.value_changed.connect(_on_volume)
-	_settings_box.add_child(vol)
+	settings_box.add_child(vol)
 
 	var fs := CheckBox.new()
 	fs.text = "Fullscreen"
 	fs.button_pressed = cfg.get_value("settings", "fullscreen", false)
+	fs.add_theme_color_override("font_color", UIS.TEXT)
 	fs.toggled.connect(_on_fullscreen)
-	_settings_box.add_child(fs)
+	settings_box.add_child(fs)
 
 	var vs := CheckBox.new()
 	vs.text = "VSync"
 	vs.button_pressed = cfg.get_value("settings", "vsync", true)
+	vs.add_theme_color_override("font_color", UIS.TEXT)
 	vs.toggled.connect(_on_vsync)
-	_settings_box.add_child(vs)
+	settings_box.add_child(vs)
 
 	var back := Button.new()
 	back.text = "BACK"
+	UIS.style_button(back, UIS.MINT, 18)
 	back.pressed.connect(_on_settings_back)
-	_settings_box.add_child(back)
+	settings_box.add_child(back)
 
 
 func _menu_button(label: String, handler: Callable) -> Button:
 	var btn := Button.new()
 	btn.text = label
-	btn.add_theme_font_size_override("font_size", 22)
-	btn.custom_minimum_size = Vector2(280.0, 46.0)
+	UIS.style_button(btn, UIS.MINT, 22)
+	btn.custom_minimum_size = Vector2(280.0, 50.0)
 	btn.pressed.connect(handler)
 	_menu_box.add_child(btn)
 	return btn
@@ -165,11 +188,11 @@ func _on_begin() -> void:
 
 func _on_settings() -> void:
 	_menu_box.visible = false
-	_settings_box.visible = true
+	_settings_panel.visible = true
 
 
 func _on_settings_back() -> void:
-	_settings_box.visible = false
+	_settings_panel.visible = false
 	_menu_box.visible = true
 	_begin_btn.grab_focus()
 

@@ -88,13 +88,15 @@ var _score_tick: float = 0.0
 
 # v0.3 — pick-3 upgrade system: every kill threshold pauses the run and
 # offers 3 of these (all stack; multiplicative where sensible)
+const UIS = preload("res://scripts/ui_style.gd")
+
 const UPGRADE_POOL := [
-	{"id": "damage", "name": "Pointier Flock", "desc": "+20% contact damage"},
-	{"id": "speed", "name": "Swift Current", "desc": "Units fly 10% faster"},
-	{"id": "net", "name": "Wider Net", "desc": "+15% recruit reach"},
-	{"id": "magnet", "name": "Magnet Heart", "desc": "Strays drift toward you (+150 range)"},
-	{"id": "combo", "name": "Patient Hunter", "desc": "+0.5s combo window"},
-	{"id": "loot", "name": "Bountiful Kills", "desc": "Kills drop +1 extra stray"},
+	{"id": "damage", "name": "Pointier Flock", "desc": "+20% contact damage", "color": Color(2.2, 0.8, 0.4)},
+	{"id": "speed", "name": "Swift Current", "desc": "Units fly 10% faster", "color": Color(0.5, 1.8, 2.4)},
+	{"id": "net", "name": "Wider Net", "desc": "+15% recruit reach", "color": Color(0.55, 2.4, 1.3)},
+	{"id": "magnet", "name": "Magnet Heart", "desc": "Strays drift toward you (+150 range)", "color": Color(1.8, 0.7, 2.2)},
+	{"id": "combo", "name": "Patient Hunter", "desc": "+0.5s combo window", "color": Color(2.2, 1.8, 0.6)},
+	{"id": "loot", "name": "Bountiful Kills", "desc": "Kills drop +1 extra stray", "color": Color(1.6, 2.2, 0.5)},
 ]
 
 var damage_mult: float = 1.0         # read by enemies each contact frame
@@ -227,18 +229,26 @@ func _update_swarm_visuals(swarm_units: Array) -> void:
 func _build_perf_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_perf_label = Label.new()
-	_perf_label.position = Vector2(8.0, 6.0)
-	_perf_label.add_theme_font_size_override("font_size", 13)
-	_perf_label.modulate = Color(0.8, 0.9, 1.0, 0.8)
-	layer.add_child(_perf_label)
 
+	# Subtle vignette over the play field — depth without stealing attention
+	UIS.add_vignette(layer, 0.34)
+
+	# Game HUD: top-left, outlined for readability over the neon field
 	_kills_label = Label.new()
-	_kills_label.text = "Flock: 0   Kills: 0"
-	_kills_label.position = Vector2(8.0, 26.0)
-	_kills_label.add_theme_font_size_override("font_size", 16)
+	_kills_label.text = "Flock: 0   Kills: 0   Score: 0"
+	_kills_label.position = Vector2(14.0, 10.0)
+	_kills_label.add_theme_font_size_override("font_size", 18)
 	_kills_label.modulate = Color(1.0, 0.75, 0.6)
+	UIS.outline(_kills_label, 6)
 	layer.add_child(_kills_label)
+
+	# Dev perf readout: bottom-left, small and dim
+	_perf_label = Label.new()
+	_perf_label.add_theme_font_size_override("font_size", 11)
+	_perf_label.modulate = Color(0.8, 0.9, 1.0, 0.45)
+	_perf_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	_perf_label.position += Vector2(10.0, -24.0)
+	layer.add_child(_perf_label)
 
 
 func _update_perf_hud(delta: float) -> void:
@@ -254,16 +264,17 @@ func _update_perf_hud(delta: float) -> void:
 
 func spawn_followers() -> void:
 	_total_units = follower_count
+	# Centered on the player so the opening frame shows a field of strays
+	var center: Vector2 = player.global_position if player != null else global_position
 	for i in range(follower_count):
 		var follower: Node2D = follower_scene.instantiate()
 		add_child(follower)
 
-		# Random position within a box centered on Phase1
 		var offset := Vector2(
 			randf_range(-spawn_area_size.x * 0.5, spawn_area_size.x * 0.5),
 			randf_range(-spawn_area_size.y * 0.5, spawn_area_size.y * 0.5)
 		)
-		follower.global_position = global_position + offset
+		follower.global_position = center + offset
 
 
 func _physics_process(delta: float) -> void:
@@ -561,42 +572,57 @@ func _trigger_game_over() -> void:
 	add_child(layer)
 
 	var overlay := ColorRect.new()
-	overlay.color = Color(0.0, 0.0, 0.05, 0.72)
+	overlay.color = Color(0.0, 0.0, 0.04, 0.74)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(overlay)
+	UIS.add_vignette(layer, 0.55)
+
+	var panel := UIS.centered_panel(UIS.VIOLET)
+	layer.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(box)
 
 	var title := Label.new()
 	title.text = "THE FLOCK IS GONE"
-	title.add_theme_font_size_override("font_size", 44)
-	title.modulate = Color(2.0, 0.6, 2.2)
+	title.add_theme_font_size_override("font_size", 42)
+	title.modulate = UIS.VIOLET
+	UIS.outline(title, 8)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	title.size = Vector2(800.0, 60.0)
-	title.position += Vector2(-400.0, -90.0)
-	layer.add_child(title)
+	box.add_child(title)
 
 	var secs: int = int((Time.get_ticks_msec() - _run_start_ms) / 1000.0)
+	var score_lbl := Label.new()
+	if score >= best_score:
+		score_lbl.text = "Score %d   —   NEW BEST" % score
+		score_lbl.modulate = UIS.GOLD
+	else:
+		score_lbl.text = "Score %d   ·   best %d" % [score, best_score]
+		score_lbl.modulate = UIS.TEXT
+	score_lbl.add_theme_font_size_override("font_size", 22)
+	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(score_lbl)
+
 	var stats := Label.new()
-	var score_line: String = "Score: %d  (BEST!)" % score if score >= best_score else "Score: %d   Best: %d" % [score, best_score]
-	stats.text = "%s\nSurvived %d:%02d      Kills: %d      Peak flock: %d      Units lost: %d" \
-		% [score_line, secs / 60, secs % 60, kills, _peak_swarm, units_lost]
-	stats.add_theme_font_size_override("font_size", 18)
-	stats.modulate = Color(0.85, 0.9, 1.0)
+	stats.text = "survived %d:%02d   ·   kills %d   ·   peak flock %d   ·   lost %d" \
+		% [secs / 60, secs % 60, kills, _peak_swarm, units_lost]
+	stats.add_theme_font_size_override("font_size", 15)
+	stats.modulate = UIS.TEXT_DIM
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	stats.size = Vector2(800.0, 60.0)
-	stats.position += Vector2(-400.0, -30.0)
-	layer.add_child(stats)
+	box.add_child(stats)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0.0, 6.0)
+	box.add_child(spacer)
 
 	var hint := Label.new()
-	hint.text = "R or tap — fly again        M — menu"
-	hint.add_theme_font_size_override("font_size", 16)
-	hint.modulate = Color(0.6, 0.65, 0.75)
+	hint.text = "R or tap — fly again          M — menu"
+	hint.add_theme_font_size_override("font_size", 14)
+	hint.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.8)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	hint.size = Vector2(800.0, 30.0)
-	hint.position += Vector2(-400.0, 30.0)
-	layer.add_child(hint)
+	box.add_child(hint)
 
 
 func _show_upgrade_choice() -> void:
@@ -615,35 +641,100 @@ func _show_upgrade_choice() -> void:
 	add_child(_upgrade_layer)
 
 	var overlay := ColorRect.new()
-	overlay.color = Color(0.0, 0.0, 0.05, 0.65)
+	overlay.color = Color(0.0, 0.0, 0.04, 0.72)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_upgrade_layer.add_child(overlay)
+	UIS.add_vignette(_upgrade_layer, 0.5)
 
 	var title := Label.new()
 	title.text = "THE MURMURATION GROWS"
-	title.add_theme_font_size_override("font_size", 32)
-	title.modulate = Color(0.6, 2.4, 1.4)
+	title.add_theme_font_size_override("font_size", 34)
+	title.modulate = UIS.MINT
+	UIS.outline(title, 8)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	title.size = Vector2(800.0, 44.0)
-	title.position += Vector2(-400.0, -170.0)
+	title.size = Vector2(800.0, 46.0)
+	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+	title.position += Vector2(0.0, -186.0)
 	_upgrade_layer.add_child(title)
 
-	var card_w := 250.0
-	var card_h := 150.0
-	var gap := 24.0
+	var sub := Label.new()
+	sub.text = "level %d — choose an instinct" % upgrade_level
+	sub.add_theme_font_size_override("font_size", 15)
+	sub.modulate = UIS.TEXT_DIM
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.size = Vector2(800.0, 24.0)
+	sub.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+	sub.position += Vector2(0.0, -142.0)
+	_upgrade_layer.add_child(sub)
+
+	var card_w := 252.0
+	var card_h := 200.0
+	var gap := 26.0
 	for i in range(_upgrade_offer.size()):
 		var up: Dictionary = _upgrade_offer[i]
+		var accent: Color = up["color"]
+
 		var btn := Button.new()
-		btn.text = "[%d]  %s\n\n%s" % [i + 1, up["name"], up["desc"]]
-		btn.add_theme_font_size_override("font_size", 16)
+		UIS.style_button(btn, accent, 16)
 		btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		btn.size = Vector2(card_w, card_h)
-		btn.position += Vector2(-(card_w * 1.5 + gap) + float(i) * (card_w + gap), -card_h * 0.5)
+		btn.position += Vector2(-(card_w * 1.5 + gap) + float(i) * (card_w + gap), -card_h * 0.45)
 		btn.pressed.connect(pick_upgrade.bind(i))
 		_upgrade_layer.add_child(btn)
+
+		# Card content (mouse-transparent so clicks land on the button)
+		var box := VBoxContainer.new()
+		box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_theme_constant_override("separation", 8)
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		btn.add_child(box)
+
+		var icon: Control = preload("res://scripts/upgrade_icon.gd").new()
+		icon.icon_id = up["id"]
+		icon.accent = accent
+		icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		box.add_child(icon)
+
+		var name_lbl := Label.new()
+		name_lbl.text = up["name"]
+		name_lbl.add_theme_font_size_override("font_size", 18)
+		name_lbl.modulate = accent
+		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(name_lbl)
+
+		var desc_lbl := Label.new()
+		desc_lbl.text = up["desc"]
+		desc_lbl.add_theme_font_size_override("font_size", 13)
+		desc_lbl.modulate = UIS.TEXT_DIM
+		desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_lbl.custom_minimum_size = Vector2(card_w - 40.0, 0.0)
+		desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(desc_lbl)
+
+		var hint := Label.new()
+		hint.text = "[ %d ]" % (i + 1)
+		hint.add_theme_font_size_override("font_size", 12)
+		hint.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.7)
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(hint)
+
 		if i == 0:
 			btn.grab_focus()   # controller: dpad/stick between cards, A to pick
+
+		# Entry: staggered rise + fade (runs while the tree is paused)
+		btn.modulate.a = 0.0
+		var end_y: float = btn.position.y
+		btn.position.y += 26.0
+		var tw := create_tween()
+		tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		tw.tween_interval(0.05 * float(i))
+		tw.set_parallel(true)
+		tw.tween_property(btn, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(btn, "position:y", end_y, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func pick_upgrade(index: int) -> void:
@@ -694,19 +785,32 @@ func toggle_pause() -> void:
 		add_child(_pause_layer)
 
 		var overlay := ColorRect.new()
-		overlay.color = Color(0.0, 0.0, 0.05, 0.6)
+		overlay.color = Color(0.0, 0.0, 0.04, 0.62)
 		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		_pause_layer.add_child(overlay)
 
+		var panel := UIS.centered_panel(UIS.MINT)
+		_pause_layer.add_child(panel)
+
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 12)
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		panel.add_child(box)
+
 		var lbl := Label.new()
-		lbl.text = "PAUSED\n\nEsc — resume        R — restart        M — menu"
-		lbl.add_theme_font_size_override("font_size", 28)
-		lbl.modulate = Color(0.9, 0.95, 1.1)
+		lbl.text = "PAUSED"
+		lbl.add_theme_font_size_override("font_size", 34)
+		lbl.modulate = UIS.MINT
+		UIS.outline(lbl, 6)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-		lbl.size = Vector2(600.0, 120.0)
-		lbl.position += Vector2(-300.0, -60.0)
-		_pause_layer.add_child(lbl)
+		box.add_child(lbl)
+
+		var hint := Label.new()
+		hint.text = "Esc — resume        R — restart        M — menu"
+		hint.add_theme_font_size_override("font_size", 15)
+		hint.modulate = UIS.TEXT_DIM
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(hint)
 	elif _pause_layer != null:
 		_pause_layer.queue_free()
 		_pause_layer = null
