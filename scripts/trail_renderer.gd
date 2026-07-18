@@ -45,10 +45,14 @@ func _process(_delta: float) -> void:
 	# Record points at 30 Hz, staggered by index so writes spread across frames
 	_tick += 1
 	for i in range(_units.size()):
-		if (i + _tick) % 2 != 0:
-			continue
 		var u = _units[i]
 		if not is_instance_valid(u):
+			# Unit was eaten — retract its trail instead of freezing it in place
+			if _trails[i].size() > 0:
+				var dead: PackedVector2Array = _trails[i]
+				dead.remove_at(0)
+			continue
+		if (i + _tick) % 2 != 0:
 			continue
 		var t: PackedVector2Array = _trails[i]
 		t.append(u.global_position)

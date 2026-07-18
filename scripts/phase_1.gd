@@ -60,9 +60,31 @@ var _perf_logger: Node = null
 @export var enemy_spawn_distance: float = 900.0
 
 var enemy_scene: PackedScene = preload("res://scenes/Enemy.tscn")
+var tail_biter_scene: PackedScene = preload("res://scenes/TailBiter.tscn")
+var tank_scene: PackedScene = preload("res://scenes/HeavyTank.tscn")
+var interceptor_scene: PackedScene = preload("res://scenes/Interceptor.tscn")
 var kills: int = 0
 var _enemy_spawn_timer: float = 2.0
 var _kills_label: Label
+
+# G2 — stakes: tail-biters eat stragglers, eaten units respawn as strays
+# at the map edge, and losing the whole flock ends the run
+@export var tail_biter_chance: float = 0.35   # spawn mix once the flock is big enough
+@export var stray_respawn_distance: float = 1200.0
+
+var _has_collected: bool = false
+var _game_over: bool = false
+var _game_over_at_ms: int = 0
+var _run_start_ms: int = 0
+var _peak_swarm: int = 0
+var units_lost: int = 0
+
+# G5 — score + persistence
+const SAVE_PATH := "user://save.cfg"
+var score: int = 0
+var best_score: int = 0
+var best_time_s: int = 0
+var _score_tick: float = 0.0
 
 # Physics-juice pass: impact feedback systems
 const COMBO_WINDOW := 1.6            # seconds between kills to keep the chain
@@ -71,6 +93,8 @@ const SHOCKWAVE_POWER := 900.0
 const MAX_TOTAL_UNITS := 250         # cap on strays dropped by kills
 
 var _cam: Camera2D
+var _sfx: Node
+var _pause_layer: CanvasLayer = null
 var _trauma: float = 0.0             # camera shake energy, decays; shake = trauma²
 var _combo: int = 0
 var _combo_timer: float = 0.0
@@ -79,10 +103,18 @@ var _total_units: int = 0
 
 func _ready() -> void:
 	randomize()
+	_run_start_ms = Time.get_ticks_msec()
+	_load_save()
 	spawn_followers()
 	_build_swarm_renderers()
 	_build_perf_hud()
 	_cam = player.get_node_or_null("Camera2D")
+	_sfx = preload("res://scripts/sfx_player.gd").new()
+	_sfx.name = "Sfx"
+	add_child(_sfx)
+	var pause_ctl := preload("res://scripts/pause_controller.gd").new()
+	pause_ctl.name = "PauseController"
+	add_child(pause_ctl)
 	if perf_logging:
 		_perf_logger = preload("res://scripts/perf_logger.gd").new()
 		add_child(_perf_logger)
@@ -181,7 +213,7 @@ func _build_perf_hud() -> void:
 	layer.add_child(_perf_label)
 
 	_kills_label = Label.new()
-	_kills_label.text = "Kills: 0"
+	_kills_label.text = "Flock: 0   Kills: 0"
 	_kills_label.position = Vector2(8.0, 26.0)
 	_kills_label.add_theme_font_size_override("font_size", 16)
 	_kills_label.modulate = Color(1.0, 0.75, 0.6)
@@ -214,6 +246,9 @@ func spawn_followers() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _game_over:
+		return
+
 	_update_perf_hud(delta)
 
 	if player == null:
@@ -221,7 +256,11 @@ func _physics_process(delta: float) -> void:
 
 	var swarm_units: Array = get_tree().get_nodes_in_group("swarm_unit")
 	if swarm_units.is_empty():
+		if _has_collected:
+			_trigger_game_over()
 		return
+	_has_collected = true
+	_peak_swarm = maxi(_peak_swarm, swarm_units.size())
 
 	var player_pos: Vector2 = player.global_position
 	var player_speed: float = 0.0
@@ -273,10 +312,21 @@ func _physics_process(delta: float) -> void:
 
 	_update_enemies(swarm_units, delta)
 
-	# Track count for the perf HUD (print() here caused hitches during collect bursts)
+	# Survival score: +1/second while the flock lives
+	_score_tick += delta
+	if _score_tick >= 1.0:
+		_score_tick -= 1.0
+		score += 1
+		_update_kills_label()
+
+	# Track count for the HUD (print() here caused hitches during collect bursts)
 	var new_count: int = swarm_units.size()
 	if new_count != collected_count:
+		if new_count > collected_count:
+			# Recruit ping rises subtly with flock size
+			play_sfx("collect", 1.0 + minf(float(new_count) * 0.004, 0.6))
 		collected_count = new_count
+		_update_kills_label()
 
 
 func _update_enemies(swarm_units: Array, delta: float) -> void:
@@ -285,11 +335,16 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 
 	var enemies: Array = get_tree().get_nodes_in_group("enemies")
 
-	if enemies.size() < max_enemies:
+	# G5 difficulty curve: spawns quicken and the cap grows as minutes pass
+	var minutes: float = float(Time.get_ticks_msec() - _run_start_ms) / 60000.0
+	var interval: float = maxf(enemy_spawn_interval / (1.0 + minutes * 0.35), 1.2)
+	var cap: int = mini(max_enemies + int(minutes * 2.0), 16)
+
+	if enemies.size() < cap:
 		_enemy_spawn_timer -= delta
 		if _enemy_spawn_timer <= 0.0:
-			_enemy_spawn_timer = enemy_spawn_interval
-			_spawn_enemy()
+			_enemy_spawn_timer = interval
+			_spawn_enemy(minutes)
 
 	for e in enemies:
 		e.process_flock_contact(swarm_units, delta)
@@ -319,8 +374,11 @@ func _resolve_enemy_collisions(swarm_units: Array, enemies: Array) -> void:
 			if dist < min_d and dist > 0.001:
 				var nrm: Vector2 = d / dist
 				var overlap: float = min_d - dist
-				e_pos += nrm * overlap * ENEMY_PUSH_SHARE
-				u.global_position -= nrm * overlap * (1.0 - ENEMY_PUSH_SHARE)
+				e_pos += nrm * overlap * e.push_share
+				u.global_position -= nrm * overlap * (1.0 - e.push_share)
+				# plowers (tank) hurl units aside like bowling pins
+				if e.plow_kick > 0.0:
+					u.vel -= nrm * overlap * e.plow_kick
 				# grind: the ring's motion carries the enemy along
 				e.apply_grind(u.vel * GRIND_TRANSFER)
 
@@ -349,21 +407,60 @@ func _resolve_enemy_collisions(swarm_units: Array, enemies: Array) -> void:
 				b.global_position += push
 
 
-func _spawn_enemy() -> void:
-	var e: Node2D = enemy_scene.instantiate()
+func _spawn_enemy(minutes: float = 0.0) -> void:
+	var e: Node2D = _pick_enemy_scene(minutes).instantiate()
 	add_child(e)
 	var a: float = randf() * TAU
 	e.global_position = player.global_position + Vector2(cos(a), sin(a)) * enemy_spawn_distance
 	e.set_target(player)
+	# Late-run enemies get tougher (visible in their health arcs)
+	e.max_health *= 1.0 + minutes * 0.15
+	e.health = e.max_health
 	e.died.connect(_on_enemy_died)
+	if e.has_signal("ate_unit"):
+		e.ate_unit.connect(_on_unit_eaten)
+
+
+func _pick_enemy_scene(minutes: float) -> PackedScene:
+	# Roster unlocks over the run: chasers → biters (flock ≥5) → interceptors
+	# (1 min) → tanks (2 min). One roll, exclusive bands; a locked band falls
+	# back to a chaser rather than inflating the other types' odds.
+	var r: float = randf()
+	if r < 0.12:
+		return tank_scene if minutes >= 2.0 else enemy_scene
+	if r < 0.34:
+		return interceptor_scene if minutes >= 1.0 else enemy_scene
+	if r < 0.34 + tail_biter_chance:
+		return tail_biter_scene if collected_count >= 5 else enemy_scene
+	return enemy_scene
+
+
+func _on_unit_eaten(pos: Vector2) -> void:
+	units_lost += 1
+	add_trauma(0.22)
+	play_sfx("gulp")
+
+	var burst: Node2D = preload("res://scripts/hit_burst.gd").new()
+	burst.color = Color(2.0, 0.5, 2.4)   # violet gulp — losing feels different from killing
+	burst.scale_mult = 0.5
+	add_child(burst)
+	burst.global_position = pos
+
+	# The bitten unit is banished, not destroyed: a replacement stray appears
+	# far away at the "map edge" — go win it back
+	var f: Node2D = follower_scene.instantiate()
+	add_child(f)
+	var a: float = randf() * TAU
+	f.global_position = player.global_position + Vector2(cos(a), sin(a)) * stray_respawn_distance
 
 
 func _on_enemy_died(e) -> void:
 	kills += 1
 
-	# Combo chain: kills within the window multiply the spectacle
+	# Combo chain: kills within the window multiply the spectacle AND the score
 	_combo = _combo + 1 if _combo_timer > 0.0 else 1
 	_combo_timer = COMBO_WINDOW
+	score += 10 * e.stray_drop * _combo
 	_update_kills_label()
 
 	var pos: Vector2 = e.global_position
@@ -372,16 +469,133 @@ func _on_enemy_died(e) -> void:
 	add_trauma(0.3 + 0.08 * float(_combo))
 	_hit_stop()
 	_death_shockwave(pos)
-	_drop_stray(pos)
+	play_sfx("kill")
+
+	# Loot: heavier enemies pay out more strays
+	for i in range(e.stray_drop):
+		_drop_stray(pos)
 
 
 func _update_kills_label() -> void:
 	if _combo >= 2:
-		_kills_label.text = "Kills: %d   x%d!" % [kills, _combo]
+		_kills_label.text = "Flock: %d   Kills: %d   Score: %d   x%d!" % [collected_count, kills, score, _combo]
 		_kills_label.modulate = Color(2.0, 1.4, 0.8)   # blooms while the chain is alive
 	else:
-		_kills_label.text = "Kills: %d" % kills
+		_kills_label.text = "Flock: %d   Kills: %d   Score: %d" % [collected_count, kills, score]
 		_kills_label.modulate = Color(1.0, 0.75, 0.6)
+
+
+func _load_save() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) == OK:
+		best_score = cfg.get_value("run", "best_score", 0)
+		best_time_s = cfg.get_value("run", "best_time_s", 0)
+
+
+func _write_save() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("run", "best_score", best_score)
+	cfg.set_value("run", "best_time_s", best_time_s)
+	cfg.save(SAVE_PATH)
+
+
+func _trigger_game_over() -> void:
+	_game_over = true
+	_game_over_at_ms = Time.get_ticks_msec()
+	Engine.time_scale = 1.0
+	play_sfx("gameover")
+
+	# Persist bests
+	var secs_run: int = int(float(Time.get_ticks_msec() - _run_start_ms) / 1000.0)
+	var new_best: bool = score > best_score
+	if new_best:
+		best_score = score
+	best_time_s = maxi(best_time_s, secs_run)
+	_write_save()
+
+	get_tree().paused = true
+
+	var layer := CanvasLayer.new()
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.05, 0.72)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(overlay)
+
+	var title := Label.new()
+	title.text = "THE FLOCK IS GONE"
+	title.add_theme_font_size_override("font_size", 44)
+	title.modulate = Color(2.0, 0.6, 2.2)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	title.size = Vector2(800.0, 60.0)
+	title.position += Vector2(-400.0, -90.0)
+	layer.add_child(title)
+
+	var secs: int = int((Time.get_ticks_msec() - _run_start_ms) / 1000.0)
+	var stats := Label.new()
+	var score_line: String = "Score: %d  (BEST!)" % score if score >= best_score else "Score: %d   Best: %d" % [score, best_score]
+	stats.text = "%s\nSurvived %d:%02d      Kills: %d      Peak flock: %d      Units lost: %d" \
+		% [score_line, secs / 60, secs % 60, kills, _peak_swarm, units_lost]
+	stats.add_theme_font_size_override("font_size", 18)
+	stats.modulate = Color(0.85, 0.9, 1.0)
+	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stats.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	stats.size = Vector2(800.0, 60.0)
+	stats.position += Vector2(-400.0, -30.0)
+	layer.add_child(stats)
+
+	var hint := Label.new()
+	hint.text = "Press R — or tap — to lead a new murmuration"
+	hint.add_theme_font_size_override("font_size", 16)
+	hint.modulate = Color(0.6, 0.65, 0.75)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	hint.size = Vector2(800.0, 30.0)
+	hint.position += Vector2(-400.0, 30.0)
+	layer.add_child(hint)
+
+
+func request_restart() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().reload_current_scene()
+
+
+func toggle_pause() -> void:
+	if _game_over:
+		return
+	var pausing: bool = not get_tree().paused
+	get_tree().paused = pausing
+	if pausing:
+		_pause_layer = CanvasLayer.new()
+		_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(_pause_layer)
+
+		var overlay := ColorRect.new()
+		overlay.color = Color(0.0, 0.0, 0.05, 0.6)
+		overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_pause_layer.add_child(overlay)
+
+		var lbl := Label.new()
+		lbl.text = "PAUSED\n\nEsc — resume        R — restart"
+		lbl.add_theme_font_size_override("font_size", 28)
+		lbl.modulate = Color(0.9, 0.95, 1.1)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		lbl.size = Vector2(600.0, 120.0)
+		lbl.position += Vector2(-300.0, -60.0)
+		_pause_layer.add_child(lbl)
+	elif _pause_layer != null:
+		_pause_layer.queue_free()
+		_pause_layer = null
+
+
+func play_sfx(sfx_name: String, pitch: float = 1.0) -> void:
+	if _sfx != null:
+		_sfx.play(sfx_name, pitch)
 
 
 func add_trauma(amount: float) -> void:

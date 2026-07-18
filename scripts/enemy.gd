@@ -18,10 +18,17 @@ extends Node2D
 
 @export var knockback_scale: float = 0.05  # fast hits shove the enemy along the unit's velocity
 
-const COLOR_BODY := Color(1.8, 0.5, 0.4)   # HDR hostile ember
-const COLOR_CORE := Color(0.35, 0.06, 0.10) # dark "eye"
-const COLOR_RIM := Color(2.6, 0.8, 0.5)
-const COLOR_HEALTH := Color(2.0, 0.4, 0.3, 0.8)
+# Palette as vars so subclasses (tail_biter.gd etc.) can re-skin in _ready
+var color_body := Color(1.8, 0.5, 0.4)   # HDR hostile ember
+var color_core := Color(0.35, 0.06, 0.10) # dark "eye"
+var color_rim := Color(2.6, 0.8, 0.5)
+var color_health := Color(2.0, 0.4, 0.3, 0.8)
+
+# Physics personality — subclasses override in _ready (see heavy_tank.gd)
+var push_share: float = 0.75    # fraction of unit-overlap the ENEMY absorbs (low = plows through)
+var plow_kick: float = 0.0      # velocity imparted to units per px of overlap (bowling pins)
+var knock_resist: float = 0.0   # 0..1 — resistance to grind/knockback impulses
+var stray_drop: int = 1         # strays left behind on death (also score weight)
 
 signal died(enemy)
 
@@ -50,10 +57,15 @@ func set_target(t: Node2D) -> void:
 	_target = t
 
 
-func _physics_process(delta: float) -> void:
+# Overridable movement — the base chaser dumbly hunts the player
+func _update_movement(delta: float) -> void:
 	if _target != null and is_instance_valid(_target):
 		var dir: Vector2 = (_target.global_position - global_position).normalized()
 		global_position += dir * move_speed * delta
+
+
+func _physics_process(delta: float) -> void:
+	_update_movement(delta)
 
 	# Knockback decays exponentially
 	global_position += _knock * delta
@@ -73,7 +85,7 @@ func _physics_process(delta: float) -> void:
 # Physical shove from ring/flock contact — works regardless of damage threshold,
 # so even a parked ring buffets and carries intruders along its rotation
 func apply_grind(impulse: Vector2) -> void:
-	_knock = (_knock + impulse).limit_length(600.0)
+	_knock = (_knock + impulse * (1.0 - knock_resist)).limit_length(600.0)
 
 
 # Called by Phase1 each physics frame with the already-fetched swarm array
@@ -108,7 +120,7 @@ func process_flock_contact(swarm_units: Array, delta: float) -> void:
 		_deform_axis = strongest_vel.angle()
 		_deform_vel -= 5.0 * strongest_frac
 
-		# A genuine whip-crack (near-max-speed hit) throws sparks
+		# A genuine whip-crack (near-max-speed hit) throws sparks and snaps
 		if strongest_frac >= 0.7 and _spark_cooldown <= 0.0:
 			_spark_cooldown = 0.15
 			var spark: Node2D = preload("res://scripts/hit_burst.gd").new()
@@ -116,6 +128,8 @@ func process_flock_contact(swarm_units: Array, delta: float) -> void:
 			spark.color = Color(3.2, 2.6, 1.6)
 			get_parent().add_child(spark)
 			spark.global_position = (strongest_pos + global_position) * 0.5
+			if get_parent().has_method("play_sfx"):
+				get_parent().play_sfx("whip")
 
 		if health <= 0.0:
 			_die()
@@ -139,14 +153,14 @@ func _draw() -> void:
 
 	var r: float = body_radius + sin(_pulse) * 1.5
 
-	var body := COLOR_BODY
+	var body := color_body
 	if _flash > 0.0:
 		body = body.lerp(Color(4.0, 4.0, 4.0), _flash * 0.8)  # hit flash, blooms hard
 
 	draw_circle(Vector2.ZERO, r, body, true, -1.0, true)
-	draw_circle(Vector2.ZERO, r * 0.45, COLOR_CORE, true, -1.0, true)
-	draw_circle(Vector2.ZERO, r, COLOR_RIM, false, 2.0, true)
+	draw_circle(Vector2.ZERO, r * 0.45, color_core, true, -1.0, true)
+	draw_circle(Vector2.ZERO, r, color_rim, false, 2.0, true)
 
 	if health < max_health:
 		var frac: float = clampf(health / max_health, 0.0, 1.0)
-		draw_arc(Vector2.ZERO, r + 6.0, -PI / 2.0, -PI / 2.0 + TAU * frac, 32, COLOR_HEALTH, 2.5)
+		draw_arc(Vector2.ZERO, r + 6.0, -PI / 2.0, -PI / 2.0 + TAU * frac, 32, color_health, 2.5)

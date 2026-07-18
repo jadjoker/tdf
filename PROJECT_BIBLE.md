@@ -131,8 +131,13 @@ towerdefense/
 │   ├── grid_background.gd   — world-space grid backdrop
 │   ├── trail_renderer.gd    — ALL swarm trails in one canvas item (perf pass B)
 │   ├── perf_logger.gd       — buffered per-frame CSV profiler (toggle on Phase1)
-│   ├── enemy.gd             — G1 chaser: velocity-scaled contact damage intake, juice
-│   ├── hit_burst.gd         — one-shot expanding ring on enemy death
+│   ├── enemy.gd             — enemy base + chaser: velocity damage intake, grind, jelly, juice
+│   ├── tail_biter.gd        — G2 straggler hunter: stalk→coil→lunge, eats units, digests
+│   ├── heavy_tank.gd        — G4 wall: plows the flock, grind-only kill, triple loot
+│   ├── interceptor.gd       — G4 line-cutter: dives at predicted player position
+│   ├── sfx_player.gd        — pooled playback of the procedural SFX set
+│   ├── pause_controller.gd  — always-on input shim: Esc pause, R/tap restart
+│   ├── hit_burst.gd         — one-shot expanding ring (death burst / spark / gulp)
 │   └── phase_1.gd           — THE movement system (sacred) + renderers + enemy spawner
 └── git_helper.py / .bat     — custom git convenience tooling
 ```
@@ -168,13 +173,40 @@ pickup economy. Defense and offense are the same verb: moving well.
    hit-stop (0.05s @ 5% time scale), trauma-based camera shake (shake = trauma²),
    whip-crack sparks (hits ≥0.7 frac), combo chains (`COMBO_WINDOW` 1.6s), kills
    drop a recruitable stray (`MAX_TOTAL_UNITS` 250).
-2. ⬜ **G2 — stakes:** enemies eat straggler units (tail-biters); eaten units respawn
-   as strays at map edges; losing the whole flock = game over
-3. ⬜ **G3 — economy:** finite strays per area, risky retrieval runs, swarm size as score
-4. ⬜ **G4 — enemy variety:** chaser (outrun) / interceptor (cuts your line) /
-   armored (whip-crack speed threshold only) / tail-biter (punishes straight lines)
-5. ⬜ **G5 — structure:** waves or open-field escalation, score, difficulty curve
-6. ⬜ **G6 — juice:** kill sounds (hit-stop + combo already built in G1.5)
+2. ✅ **G2 — stakes (Jul 2026):** violet **tail-biters** (`tail_biter.gd` extends
+   enemy.gd) ignore the player and hunt the straggler farthest from you; eating
+   banishes the unit — a replacement stray respawns `stray_respawn_distance` (1200)
+   away, so the flock is won back, not lost forever. **Lunge rework (playtest #1
+   found stalkers could never catch the flock):** stalk 340 → coil `windup_time`
+   0.35s (visible swell + pulsing threat line) → straight lunge at 950 px/s with
+   direction locked at fire — a sharp turn dodges it. Bites the first unit touched
+   mid-lunge. Fragile (60 HP), sluggish for `digest_time` (1.2s) after a bite.
+   A violet threat line always marks its prey. Spawn mix
+   `tail_biter_chance` (0.35) once flock ≥ 5. Losing the whole flock = game-over
+   overlay with run stats (time, kills, peak flock, units lost); R or tap restarts.
+   HUD shows Flock + Kills + combo.
+3. ⬜ **G3 — economy:** finite strays per area, risky retrieval runs (partially
+   covered: kills drop strays weighted by `stray_drop`, banished units respawn far)
+4. ✅ **G4 — enemy variety (Jul 2026):** four-role roster, each with physics
+   personality via base-class vars (`push_share`/`plow_kick`/`knock_resist`/`stray_drop`):
+   - **Chaser** (ember) — dumb pressure toward you
+   - **Tail-biter** (violet) — stalks stragglers, telegraphed 950px/s lunge
+   - **Interceptor** (acid gold, 1 min) — dives at your PREDICTED position
+     (`lead_time` 0.55s), cuts straight-line sprints, forces the carve
+   - **Heavy tank** (bronze, 2 min) — 500 HP wall, `push_share` 0.08 +
+     `plow_kick` 30 plows through the flock like bowling pins, 90% knock-resist
+     (grind it down, don't whip it); drops 3 strays
+5. ✅ **G5 — structure (Jul 2026):** difficulty curve (spawn interval shrinks
+   ~35%/min to 1.2s floor, enemy cap 6→16, enemy HP +15%/min), **score**
+   (+1/s survival, +10 × stray_drop × combo per kill, on HUD), best score/time
+   persisted via ConfigFile to `user://save.cfg`, death screen shows Score/Best/BEST!
+6. ✅ **G6 — audio (Jul 2026):** six procedural SFX generated from scratch by
+   script (scratchpad `gen_sfx.py` → `assets/sfx/*.wav`, 100% original, ship-safe):
+   collect (rising ping, pitch climbs with flock size), kill boom, whip snap
+   (plays on spark-grade hits), gulp, lunge warning, gameover drone. Pooled
+   playback in `sfx_player.gd` (8 players, ±6% pitch jitter, −8 dB).
+   **Pause shell:** Esc pause overlay + R restart via `pause_controller.gd`
+   (PROCESS_MODE_ALWAYS input shim so the tree stays cleanly pausable).
 
 ### Physics Toys Backlog (lean into what's cool)
 - **Heavy tank enemy** — plows *through* the flock physically (reverse push share),

@@ -67,6 +67,14 @@ func _process(delta: float) -> void:
 	# No queue_redraw — Phase1's MultiMesh reads visual_transform() instead
 
 
+func get_eaten() -> void:
+	# Bitten by a tail-biter: leaves the swarm and this instance dies.
+	# Phase1 respawns a replacement stray at the map edge (the unit is
+	# banished, not destroyed — the flock can be won back).
+	remove_from_group("swarm_unit")
+	queue_free()
+
+
 func visual_transform() -> Transform2D:
 	# Position + spring deformation, consumed by Phase1's MultiMesh each frame
 	return Transform2D(_axis_angle, Vector2(_stretch, 1.0 / sqrt(_stretch)), 0.0, global_position)
