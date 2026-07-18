@@ -33,6 +33,8 @@ static func style_button(btn: Button, accent: Color, font_size: int = 20) -> voi
 	btn.add_theme_stylebox_override("hover", box(BG_HOVER, accent, 2))
 	btn.add_theme_stylebox_override("pressed", box(Color(accent.r * 0.12, accent.g * 0.12, accent.b * 0.12, 0.95), accent, 2))
 	btn.add_theme_stylebox_override("focus", box(BG_HOVER, accent, 2))
+	btn.add_theme_stylebox_override("disabled", box(Color(BG.r, BG.g, BG.b, 0.6), dim(accent, 0.22), 1))
+	btn.add_theme_color_override("font_disabled_color", Color(TEXT_DIM.r, TEXT_DIM.g, TEXT_DIM.b, 0.5))
 	btn.add_theme_font_size_override("font_size", font_size)
 	btn.add_theme_color_override("font_color", TEXT)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)

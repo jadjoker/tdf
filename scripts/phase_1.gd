@@ -617,10 +617,22 @@ func _trigger_game_over() -> void:
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)
 	box.add_child(spacer)
 
+	# Buttons: stick/dpad + A on Deck, click on desktop, R/M as shortcuts.
+	# Briefly disabled so an A-press during the death moment can't skip the screen.
+	var fly_btn := _overlay_button(box, "FLY AGAIN", request_restart)
+	var menu_btn := _overlay_button(box, "MENU", go_to_menu)
+	fly_btn.disabled = true
+	menu_btn.disabled = true
+	var arm := get_tree().create_timer(0.7, true, false, true)
+	arm.timeout.connect(func() -> void:
+		fly_btn.disabled = false
+		menu_btn.disabled = false
+		fly_btn.grab_focus())
+
 	var hint := Label.new()
-	hint.text = "R or tap — fly again          M — menu"
-	hint.add_theme_font_size_override("font_size", 14)
-	hint.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.8)
+	hint.text = "R · M"
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.6)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
 
@@ -670,6 +682,7 @@ func _show_upgrade_choice() -> void:
 	var card_w := 252.0
 	var card_h := 200.0
 	var gap := 26.0
+	var cards: Array[Button] = []
 	for i in range(_upgrade_offer.size()):
 		var up: Dictionary = _upgrade_offer[i]
 		var accent: Color = up["color"]
@@ -681,6 +694,7 @@ func _show_upgrade_choice() -> void:
 		btn.position += Vector2(-(card_w * 1.5 + gap) + float(i) * (card_w + gap), -card_h * 0.45)
 		btn.pressed.connect(pick_upgrade.bind(i))
 		_upgrade_layer.add_child(btn)
+		cards.append(btn)
 
 		# Card content (mouse-transparent so clicks land on the button)
 		var box := VBoxContainer.new()
@@ -736,6 +750,13 @@ func _show_upgrade_choice() -> void:
 		tw.tween_property(btn, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(btn, "position:y", end_y, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
+	# Explicit focus wiring (with wraparound) so stick/dpad navigation between
+	# cards is guaranteed on Deck — don't rely on positional inference
+	var n_cards: int = cards.size()
+	for i in range(n_cards):
+		cards[i].focus_neighbor_left = cards[(i - 1 + n_cards) % n_cards].get_path()
+		cards[i].focus_neighbor_right = cards[(i + 1) % n_cards].get_path()
+
 
 func pick_upgrade(index: int) -> void:
 	if _upgrade_layer == null or index >= _upgrade_offer.size():
@@ -774,6 +795,22 @@ func request_restart() -> void:
 	get_tree().reload_current_scene()
 
 
+func go_to_menu() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+
+
+func _overlay_button(parent: Container, label: String, handler: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	UIS.style_button(btn, UIS.MINT, 18)
+	btn.custom_minimum_size = Vector2(240.0, 44.0)
+	btn.pressed.connect(handler)
+	parent.add_child(btn)
+	return btn
+
+
 func toggle_pause() -> void:
 	if _game_over or _upgrade_layer != null:
 		return
@@ -805,10 +842,17 @@ func toggle_pause() -> void:
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(lbl)
 
+		# Real buttons — stick/dpad navigates, A activates (Deck friendly);
+		# Esc/R/M remain as desktop shortcuts
+		var resume := _overlay_button(box, "RESUME", toggle_pause)
+		_overlay_button(box, "RESTART", request_restart)
+		_overlay_button(box, "MENU", go_to_menu)
+		resume.grab_focus()
+
 		var hint := Label.new()
-		hint.text = "Esc — resume        R — restart        M — menu"
-		hint.add_theme_font_size_override("font_size", 15)
-		hint.modulate = UIS.TEXT_DIM
+		hint.text = "Esc · R · M"
+		hint.add_theme_font_size_override("font_size", 12)
+		hint.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.6)
 		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(hint)
 	elif _pause_layer != null:

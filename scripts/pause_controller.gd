@@ -13,23 +13,17 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Overlays are button-driven (focus nav + A / click). This shim only adds
+	# desktop hotkeys and the global controller pause toggle.
 	if _phase._game_over:
-		var restart := false
-		if event is InputEventKey and event.pressed and event.keycode == KEY_R:
-			restart = true
-		elif event is InputEventKey and event.pressed and event.keycode == KEY_M:
-			_go_to_menu()
-			return
-		# Tap/click/gamepad-A restart, delayed so the death input doesn't skip the screen
-		elif (event is InputEventMouseButton or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)) \
-				and event.pressed and Time.get_ticks_msec() - _phase._game_over_at_ms > 800:
-			restart = true
-		if restart:
-			_phase.request_restart()
+		if event is InputEventKey and event.pressed:
+			if event.keycode == KEY_R:
+				_phase.request_restart()
+			elif event.keycode == KEY_M:
+				_phase.go_to_menu()
 		return
 
-	# Upgrade cards: 1/2/3 pick; clicks and controller focus-navigation (dpad/stick
-	# + A) also work because the layer is ALWAYS-mode and the first card grabs focus
+	# Upgrade cards: 1/2/3 keyboard shortcuts (focus nav + A handles Deck)
 	if _phase._upgrade_layer != null:
 		if event is InputEventKey and event.pressed:
 			match event.keycode:
@@ -44,12 +38,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_R and get_tree().paused:
 			_phase.request_restart()
 		elif event.keycode == KEY_M and get_tree().paused:
-			_go_to_menu()
-	elif event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START:
-		_phase.toggle_pause()
-
-
-func _go_to_menu() -> void:
-	get_tree().paused = false
-	Engine.time_scale = 1.0
-	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+			_phase.go_to_menu()
+	elif event is InputEventJoypadButton and event.pressed:
+		if event.button_index == JOY_BUTTON_START:
+			_phase.toggle_pause()
+		elif event.button_index == JOY_BUTTON_B and get_tree().paused:
+			# B backs out of pause (Deck convention)
+			_phase.toggle_pause()

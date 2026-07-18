@@ -14,7 +14,14 @@ var _t: float = 0.0
 var _menu_box: VBoxContainer
 var _settings_panel: PanelContainer
 var _begin_btn: Button
+var _vol_slider: HSlider
 var _title: Label
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# B / Esc backs out of settings (Deck convention)
+	if event.is_action_pressed("ui_cancel") and _settings_panel != null and _settings_panel.visible:
+		_on_settings_back()
 
 
 func _ready() -> void:
@@ -141,15 +148,15 @@ func _build_ui() -> void:
 	vol_label.modulate = UIS.TEXT
 	settings_box.add_child(vol_label)
 
-	var vol := HSlider.new()
-	vol.min_value = 0.0
-	vol.max_value = 1.0
-	vol.step = 0.05
-	vol.value = cfg.get_value("settings", "volume", 1.0)
-	vol.custom_minimum_size = Vector2(320.0, 24.0)
-	UIS.style_slider(vol, UIS.MINT)
-	vol.value_changed.connect(_on_volume)
-	settings_box.add_child(vol)
+	_vol_slider = HSlider.new()
+	_vol_slider.min_value = 0.0
+	_vol_slider.max_value = 1.0
+	_vol_slider.step = 0.05
+	_vol_slider.value = cfg.get_value("settings", "volume", 1.0)
+	_vol_slider.custom_minimum_size = Vector2(320.0, 24.0)
+	UIS.style_slider(_vol_slider, UIS.MINT)
+	_vol_slider.value_changed.connect(_on_volume)
+	settings_box.add_child(_vol_slider)
 
 	var fs := CheckBox.new()
 	fs.text = "Fullscreen"
@@ -189,6 +196,8 @@ func _on_begin() -> void:
 func _on_settings() -> void:
 	_menu_box.visible = false
 	_settings_panel.visible = true
+	if _vol_slider != null:
+		_vol_slider.grab_focus()   # stick/dpad lands inside the panel immediately
 
 
 func _on_settings_back() -> void:
