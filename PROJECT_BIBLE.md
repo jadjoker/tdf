@@ -254,8 +254,11 @@ scope-small-polish-hard (same principle as Swarm Director's bible).
 - **v0.2 — a game exists:** G2 stakes (stragglers eaten, game over) + G3 economy +
   G4 enemy variety (chaser/interceptor/armored/tank) + G5 run structure
   (waves, score, difficulty curve, death screen with stats)
-- **v0.3 — a run matters:** in-run upgrade choices (survivors-like pick-3),
-  unlock track across runs, endless + timed modes
+- **v0.3 — a run matters:** ✅ core built Jul 2026 — pick-3 upgrade choices on kill
+  thresholds (8, +8+6/level): Pointier Flock (+20% dmg), Swift Current (+10% unit
+  speed), Wider Net (+15% recruit reach), Magnet Heart (stray attraction, +150/stack),
+  Patient Hunter (+0.5s combo), Bountiful Kills (+1 loot). Cards pause the run,
+  keys 1/2/3 or click. Still open: unlock track across runs, endless + timed modes
 - **v0.4 — shippable shell:** audio (biggest missing juice channel), main menu,
   pause, settings (volume/fullscreen/vsync), rebindable keys, controller + Steam Deck
   support (pointer steering already covers touch)

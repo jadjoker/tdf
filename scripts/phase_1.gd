@@ -86,8 +86,28 @@ var best_score: int = 0
 var best_time_s: int = 0
 var _score_tick: float = 0.0
 
+# v0.3 — pick-3 upgrade system: every kill threshold pauses the run and
+# offers 3 of these (all stack; multiplicative where sensible)
+const UPGRADE_POOL := [
+	{"id": "damage", "name": "Pointier Flock", "desc": "+20% contact damage"},
+	{"id": "speed", "name": "Swift Current", "desc": "Units fly 10% faster"},
+	{"id": "net", "name": "Wider Net", "desc": "+15% recruit reach"},
+	{"id": "magnet", "name": "Magnet Heart", "desc": "Strays drift toward you (+150 range)"},
+	{"id": "combo", "name": "Patient Hunter", "desc": "+0.5s combo window"},
+	{"id": "loot", "name": "Bountiful Kills", "desc": "Kills drop +1 extra stray"},
+]
+
+var damage_mult: float = 1.0         # read by enemies each contact frame
+var unit_speed_mult: float = 1.0
+var magnet_radius: float = 0.0
+var loot_bonus: int = 0
+var combo_window: float = 1.6
+var upgrade_level: int = 0
+var _kills_to_next: int = 8
+var _upgrade_layer: CanvasLayer = null
+var _upgrade_offer: Array = []
+
 # Physics-juice pass: impact feedback systems
-const COMBO_WINDOW := 1.6            # seconds between kills to keep the chain
 const SHOCKWAVE_RADIUS := 160.0      # death blast physically ripples the flock
 const SHOCKWAVE_POWER := 900.0
 const MAX_TOTAL_UNITS := 250         # cap on strays dropped by kills
@@ -312,6 +332,16 @@ func _physics_process(delta: float) -> void:
 
 	_update_enemies(swarm_units, delta)
 
+	# Magnet Heart: strays inside the radius drift to you on their own
+	if magnet_radius > 0.0:
+		for s in get_tree().get_nodes_in_group("stray"):
+			if not is_instance_valid(s):
+				continue
+			var d: Vector2 = player.global_position - s.global_position
+			var dist: float = d.length()
+			if dist < magnet_radius and dist > 1.0:
+				s.global_position += (d / dist) * 240.0 * delta
+
 	# Survival score: +1/second while the flock lives
 	_score_tick += delta
 	if _score_tick >= 1.0:
@@ -452,6 +482,8 @@ func _on_unit_eaten(pos: Vector2) -> void:
 	add_child(f)
 	var a: float = randf() * TAU
 	f.global_position = player.global_position + Vector2(cos(a), sin(a)) * stray_respawn_distance
+	f.max_speed *= unit_speed_mult
+	f.strength *= unit_speed_mult
 
 
 func _on_enemy_died(e) -> void:
@@ -459,7 +491,7 @@ func _on_enemy_died(e) -> void:
 
 	# Combo chain: kills within the window multiply the spectacle AND the score
 	_combo = _combo + 1 if _combo_timer > 0.0 else 1
-	_combo_timer = COMBO_WINDOW
+	_combo_timer = combo_window
 	score += 10 * e.stray_drop * _combo
 	_update_kills_label()
 
@@ -472,8 +504,14 @@ func _on_enemy_died(e) -> void:
 	play_sfx("kill")
 
 	# Loot: heavier enemies pay out more strays
-	for i in range(e.stray_drop):
+	for i in range(e.stray_drop + loot_bonus):
 		_drop_stray(pos)
+
+	# Level up on kill thresholds
+	if kills >= _kills_to_next:
+		_kills_to_next += 8 + 6 * upgrade_level
+		upgrade_level += 1
+		call_deferred("_show_upgrade_choice")
 
 
 func _update_kills_label() -> void:
@@ -558,6 +596,82 @@ func _trigger_game_over() -> void:
 	layer.add_child(hint)
 
 
+func _show_upgrade_choice() -> void:
+	if _game_over or _upgrade_layer != null:
+		return
+	get_tree().paused = true
+	play_sfx("collect", 0.7)
+
+	# Offer 3 distinct upgrades from the pool
+	var pool: Array = UPGRADE_POOL.duplicate()
+	pool.shuffle()
+	_upgrade_offer = pool.slice(0, 3)
+
+	_upgrade_layer = CanvasLayer.new()
+	_upgrade_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_upgrade_layer)
+
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.05, 0.65)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_upgrade_layer.add_child(overlay)
+
+	var title := Label.new()
+	title.text = "THE MURMURATION GROWS"
+	title.add_theme_font_size_override("font_size", 32)
+	title.modulate = Color(0.6, 2.4, 1.4)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	title.size = Vector2(800.0, 44.0)
+	title.position += Vector2(-400.0, -170.0)
+	_upgrade_layer.add_child(title)
+
+	var card_w := 250.0
+	var card_h := 150.0
+	var gap := 24.0
+	for i in range(_upgrade_offer.size()):
+		var up: Dictionary = _upgrade_offer[i]
+		var btn := Button.new()
+		btn.text = "[%d]  %s\n\n%s" % [i + 1, up["name"], up["desc"]]
+		btn.add_theme_font_size_override("font_size", 16)
+		btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		btn.size = Vector2(card_w, card_h)
+		btn.position += Vector2(-(card_w * 1.5 + gap) + float(i) * (card_w + gap), -card_h * 0.5)
+		btn.pressed.connect(pick_upgrade.bind(i))
+		_upgrade_layer.add_child(btn)
+
+
+func pick_upgrade(index: int) -> void:
+	if _upgrade_layer == null or index >= _upgrade_offer.size():
+		return
+	var id: String = _upgrade_offer[index]["id"]
+	match id:
+		"damage":
+			damage_mult *= 1.20
+		"speed":
+			unit_speed_mult *= 1.10
+			for u in get_tree().get_nodes_in_group("swarm_unit") + get_tree().get_nodes_in_group("stray"):
+				if is_instance_valid(u):
+					u.max_speed *= 1.10
+					u.strength *= 1.10
+		"net":
+			var shape: Node = player.get_node_or_null("CollisionShape2D")
+			if shape:
+				shape.scale *= 1.15
+		"magnet":
+			magnet_radius += 150.0
+		"combo":
+			combo_window += 0.5
+		"loot":
+			loot_bonus += 1
+
+	_upgrade_layer.queue_free()
+	_upgrade_layer = null
+	_upgrade_offer = []
+	get_tree().paused = false
+	play_sfx("collect", 1.3)
+
+
 func request_restart() -> void:
 	get_tree().paused = false
 	Engine.time_scale = 1.0
@@ -565,7 +679,7 @@ func request_restart() -> void:
 
 
 func toggle_pause() -> void:
-	if _game_over:
+	if _game_over or _upgrade_layer != null:
 		return
 	var pausing: bool = not get_tree().paused
 	get_tree().paused = pausing
@@ -633,6 +747,9 @@ func _drop_stray(pos: Vector2) -> void:
 	add_child(f)
 	var a: float = randf() * TAU
 	f.global_position = pos + Vector2(cos(a), sin(a)) * randf_range(10.0, 40.0)
+	# Late-spawned units inherit the run's Swift Current stacks
+	f.max_speed *= unit_speed_mult
+	f.strength *= unit_speed_mult
 
 
 func _update_swarm_follow(swarm_units: Array, delta: float) -> void:

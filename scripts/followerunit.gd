@@ -37,6 +37,8 @@ var _spring_k: float = STRETCH_STIFFNESS
 
 
 func _ready() -> void:
+	add_to_group("stray")   # uncollected units; Magnet Heart pulls this group
+
 	# Detect when the player overlaps this unit
 	body_entered.connect(_on_body_entered)
 
@@ -111,4 +113,5 @@ func _on_body_entered(body: Node) -> void:
 
 		# Mark this unit as part of the swarm so Phase1 can move it
 		# (the trail renderer and MultiMesh pick it up from this group)
+		remove_from_group("stray")
 		add_to_group("swarm_unit")

@@ -25,6 +25,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_phase.request_restart()
 		return
 
+	# Upgrade cards: 1/2/3 pick (clicks work too — the layer is ALWAYS-mode)
+	if _phase._upgrade_layer != null:
+		if event is InputEventKey and event.pressed:
+			match event.keycode:
+				KEY_1: _phase.pick_upgrade(0)
+				KEY_2: _phase.pick_upgrade(1)
+				KEY_3: _phase.pick_upgrade(2)
+		return
+
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_ESCAPE:
 			_phase.toggle_pause()

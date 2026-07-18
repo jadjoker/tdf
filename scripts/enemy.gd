@@ -47,10 +47,16 @@ var _deform_axis: float = 0.0
 var _spark_cooldown: float = 0.0
 
 
+var _mods: Node = null   # Phase1 — read for run-upgrade multipliers
+
+
 func _ready() -> void:
 	add_to_group("enemies")
 	health = max_health
 	_pulse = randf() * TAU
+	var p: Node = get_parent()
+	if p != null and "damage_mult" in p:
+		_mods = p
 
 
 func set_target(t: Node2D) -> void:
@@ -104,7 +110,8 @@ func process_flock_contact(swarm_units: Array, delta: float) -> void:
 		if speed <= min_damage_speed:
 			continue
 		var frac: float = clampf((speed - min_damage_speed) / (speed_for_max - min_damage_speed), 0.0, 1.0)
-		health -= max_unit_dps * frac * delta
+		var dmg_mult: float = _mods.damage_mult if _mods != null else 1.0
+		health -= max_unit_dps * frac * delta * dmg_mult
 		_knock += u.vel * frac * knockback_scale
 		if frac > strongest_frac:
 			strongest_frac = frac
