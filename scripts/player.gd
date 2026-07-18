@@ -5,12 +5,10 @@ extends CharacterBody2D
 # Drawn visual (no sprite) — crisp anti-aliased edges at any zoom,
 # HDR colors bloom under the glow environment
 const CORE_RADIUS := 24.0
-# Screenshot review: 2.2+ core clipped to a featureless white disk — keep the
-# body just under full bloom so the magenta identity survives, rim carries the glow
-const CORE_COLOR := Color(1.55, 1.05, 1.85)       # magenta body, tinted not clipped
-const RIM_COLOR := Color(2.6, 1.8, 3.0)           # bright rim, blooms hard
-const HIGHLIGHT_COLOR := Color(2.2, 1.9, 2.4, 0.4)
-const HALO_COLOR := Color(1.2, 0.7, 1.5, 0.10)    # soft light spill
+# Colors come from the active theme (theme_palette.gd). Design note from the
+# screenshot review: keep cores just under full bloom so tint identity
+# survives; the rim carries the hard glow.
+const TP = preload("res://scripts/theme_palette.gd")
 
 # Squash & stretch driven by a damped spring, not mapped directly from speed:
 # accelerating overshoots the stretch, hard stops squash past neutral and
@@ -55,21 +53,23 @@ func _draw() -> void:
 		var deform := Transform2D(_axis_angle, Vector2(_stretch, 1.0 / sqrt(_stretch)), 0.0, Vector2.ZERO)
 		draw_set_transform_matrix(deform)
 
+	var halo: Color = TP.P["player_halo"]
+
 	# Soft layered halo (fades outward; bloom amplifies it)
 	for i in range(3):
 		var r: float = CORE_RADIUS + 10.0 + float(i) * 8.0 + pulse
-		var a: float = HALO_COLOR.a * (1.0 - float(i) / 3.0)
-		draw_circle(Vector2.ZERO, r, Color(HALO_COLOR.r, HALO_COLOR.g, HALO_COLOR.b, a), true, -1.0, true)
+		var a: float = halo.a * (1.0 - float(i) / 3.0)
+		draw_circle(Vector2.ZERO, r, Color(halo.r, halo.g, halo.b, a), true, -1.0, true)
 
 	# Body
 	var body_r: float = CORE_RADIUS + pulse * 0.4
-	draw_circle(Vector2.ZERO, body_r, CORE_COLOR, true, -1.0, true)
+	draw_circle(Vector2.ZERO, body_r, TP.P["player_core"], true, -1.0, true)
 
 	# Off-center highlight gives it a hint of depth without a texture
-	draw_circle(Vector2(-CORE_RADIUS * 0.25, -CORE_RADIUS * 0.28), CORE_RADIUS * 0.45, HIGHLIGHT_COLOR, true, -1.0, true)
+	draw_circle(Vector2(-CORE_RADIUS * 0.25, -CORE_RADIUS * 0.28), CORE_RADIUS * 0.45, TP.P["player_hi"], true, -1.0, true)
 
 	# Crisp bright rim
-	draw_circle(Vector2.ZERO, body_r, RIM_COLOR, false, 2.5, true)
+	draw_circle(Vector2.ZERO, body_r, TP.P["player_rim"], false, 2.5, true)
 
 
 func _physics_process(_delta: float) -> void:

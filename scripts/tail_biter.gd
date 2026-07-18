@@ -26,14 +26,11 @@ var _retarget_timer: float = 0.0
 
 
 func _ready() -> void:
+	theme_key = "biter"
 	super()
 	max_health = 60.0
 	health = max_health
 	body_radius = 13.0
-	color_body = Color(1.4, 0.35, 1.6)    # hostile violet — reads apart from ember chasers
-	color_core = Color(0.25, 0.04, 0.30)
-	color_rim = Color(2.2, 0.6, 2.6)
-	color_health = Color(1.8, 0.5, 2.0, 0.8)
 
 
 func _update_movement(delta: float) -> void:
@@ -141,5 +138,6 @@ func _draw() -> void:
 		var alpha: float = 0.18
 		if _state == State.WINDUP:
 			alpha = 0.45 + sin(_pulse * 9.0) * 0.25
-		draw_line(Vector2.ZERO, to_local(_prey.global_position), Color(1.6, 0.4, 1.8, alpha), 1.5, true)
+		var lc := Color(color_rim.r * 0.7, color_rim.g * 0.7, color_rim.b * 0.7, alpha)
+		draw_line(Vector2.ZERO, to_local(_prey.global_position), lc, 1.5, true)
 	super()

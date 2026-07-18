@@ -7,6 +7,7 @@ extends "res://scripts/enemy.gd"
 
 
 func _ready() -> void:
+	theme_key = "tank"
 	super()
 	max_health = 500.0
 	health = max_health
@@ -20,8 +21,3 @@ func _ready() -> void:
 	knock_resist = 0.9
 	knockback_scale = 0.01
 	stray_drop = 3
-
-	color_body = Color(1.1, 0.60, 0.25)   # dark molten bronze
-	color_core = Color(0.20, 0.10, 0.04)
-	color_rim = Color(1.8, 1.0, 0.4)
-	color_health = Color(1.8, 1.1, 0.4, 0.8)

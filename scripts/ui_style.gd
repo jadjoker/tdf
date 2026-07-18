@@ -9,7 +9,7 @@ const TEXT_DIM := Color(0.58, 0.65, 0.76)
 const BG := Color(0.045, 0.06, 0.11, 0.92)
 const BG_HOVER := Color(0.07, 0.10, 0.17, 0.95)
 
-const MINT := Color(0.55, 2.4, 1.3)      # the game's signature accent
+static var MINT := Color(0.55, 2.4, 1.3) # the theme's signature accent (set by theme_palette)
 const GOLD := Color(2.2, 1.8, 0.6)
 const VIOLET := Color(1.8, 0.7, 2.2)
 

@@ -89,6 +89,7 @@ var _score_tick: float = 0.0
 # v0.3 — pick-3 upgrade system: every kill threshold pauses the run and
 # offers 3 of these (all stack; multiplicative where sensible)
 const UIS = preload("res://scripts/ui_style.gd")
+const TP = preload("res://scripts/theme_palette.gd")
 
 const UPGRADE_POOL := [
 	{"id": "damage", "name": "Pointier Flock", "desc": "+20% contact damage", "color": Color(2.2, 0.8, 0.4)},
@@ -127,6 +128,8 @@ func _ready() -> void:
 	randomize()
 	_run_start_ms = Time.get_ticks_msec()
 	preload("res://scripts/game_settings.gd").apply_saved()
+	TP.apply_saved()
+	_apply_world_theme()
 	_load_save()
 	spawn_followers()
 	_build_swarm_renderers()
@@ -192,9 +195,9 @@ func _bake_unit_texture(px: int = 96) -> ImageTexture:
 	var hi_center := Vector2(-body_r * 0.25, -body_r * 0.28)
 	var hi_r: float = body_r * 0.42
 
-	var body_c: Color = _FollowerScript.COLOR_SWARM
-	var rim_c: Color = _FollowerScript.RIM_SWARM
-	var hi_c: Color = _FollowerScript.HIGHLIGHT_SWARM
+	var body_c: Color = TP.P["swarm_body"]
+	var rim_c: Color = TP.P["swarm_rim"]
+	var hi_c: Color = TP.P["swarm_hi"]
 
 	for y in range(px):
 		for x in range(px):
@@ -214,6 +217,37 @@ func _bake_unit_texture(px: int = 96) -> ImageTexture:
 			img.set_pixel(x, y, col)
 
 	return ImageTexture.create_from_image(img)
+
+
+func _apply_world_theme() -> void:
+	var we: WorldEnvironment = get_node_or_null("WorldEnvironment")
+	if we != null and we.environment != null:
+		TP.apply_environment(we.environment)
+	var grid: Node = get_node_or_null("GridBackground")
+	if grid != null:
+		grid.refresh_theme()
+
+
+func cycle_theme() -> void:
+	# T key (desktop): flip through every aesthetic live, mid-run
+	var theme_names: Array = TP.names()
+	var i: int = theme_names.find(TP.current_name)
+	TP.set_theme(theme_names[(i + 1) % theme_names.size()])
+	refresh_theme_visuals()
+
+
+func refresh_theme_visuals() -> void:
+	_apply_world_theme()
+	if _unit_mm != null:
+		_unit_mm.texture = _bake_unit_texture()
+	if _trail_renderer != null:
+		_trail_renderer.rebuild_ramps()
+	for s in get_tree().get_nodes_in_group("stray"):
+		if is_instance_valid(s):
+			s.queue_redraw()
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e):
+			e._apply_theme()
 
 
 func _update_swarm_visuals(swarm_units: Array) -> void:

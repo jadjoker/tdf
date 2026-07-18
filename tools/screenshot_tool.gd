@@ -2,8 +2,9 @@ extends SceneTree
 
 # Dev tool: boot a scene, wait for it to settle, save a viewport screenshot, quit.
 # Usage:
-#   godot --path . --script tools/screenshot_tool.gd -- <scene.tscn> <out.png> [upgrade]
-# "upgrade" forces the pick-3 card screen open before capturing (shop shot).
+#   godot --path . --script tools/screenshot_tool.gd -- <scene.tscn> <out.png> [screen] [theme]
+# screen: "upgrade" | "gameover" | "pause" | "none" — forces that UI open first
+# theme: pins a theme_palette theme for the capture (ignores the saved one)
 
 var _frames: int = 0
 var _out_path: String = "screenshot.png"
@@ -15,8 +16,10 @@ func _initialize() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() >= 2:
 		_out_path = args[1]
-	if args.size() >= 3:
+	if args.size() >= 3 and args[2] != "none":
 		_forced_screen = args[2]
+	if args.size() >= 4:
+		preload("res://scripts/theme_palette.gd").lock_theme(args[3])
 	if args.size() >= 1:
 		change_scene_to_file(args[0])
 

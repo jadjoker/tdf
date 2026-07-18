@@ -2,14 +2,24 @@ extends Node2D
 
 # Static world-space grid so player/swarm speed is readable against the dark background.
 
+const TP = preload("res://scripts/theme_palette.gd")
+
 @export var cell_size: float = 120.0
 @export var extent: float = 3000.0    # grid covers ±extent from world origin
-@export var line_color: Color = Color(0.10, 0.14, 0.22, 1.0)
-@export var axis_color: Color = Color(0.16, 0.22, 0.34, 1.0)  # brighter lines through origin
+
+var line_color: Color = Color(0.10, 0.14, 0.22, 1.0)
+var axis_color: Color = Color(0.16, 0.22, 0.34, 1.0)  # brighter lines through origin
 
 
 func _ready() -> void:
 	z_index = -10
+	refresh_theme()
+
+
+func refresh_theme() -> void:
+	line_color = TP.P["grid_line"]
+	axis_color = TP.P["grid_axis"]
+	queue_redraw()
 
 
 func _draw() -> void:

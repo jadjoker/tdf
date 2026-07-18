@@ -9,16 +9,12 @@ extends "res://scripts/enemy.gd"
 
 
 func _ready() -> void:
+	theme_key = "interceptor"
 	super()
 	max_health = 40.0
 	health = max_health
 	body_radius = 11.0
 	move_speed = 420.0
-
-	color_body = Color(1.7, 1.5, 0.35)    # acid gold — reads apart from ember/violet/bronze
-	color_core = Color(0.28, 0.24, 0.05)
-	color_rim = Color(2.4, 2.2, 0.6)
-	color_health = Color(2.0, 1.8, 0.5, 0.8)
 
 
 func _update_movement(delta: float) -> void:

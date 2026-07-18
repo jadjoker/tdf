@@ -18,9 +18,13 @@ extends Node2D
 
 @export var knockback_scale: float = 0.05  # fast hits shove the enemy along the unit's velocity
 
-# Palette as vars so subclasses (tail_biter.gd etc.) can re-skin in _ready
-var color_body := Color(1.8, 0.5, 0.4)   # HDR hostile ember
-var color_core := Color(0.35, 0.06, 0.10) # dark "eye"
+# Palette comes from the active theme via theme_key ("chaser"/"biter"/
+# "interceptor"/"tank" — subclasses set theirs before super()._ready)
+const TP = preload("res://scripts/theme_palette.gd")
+
+var theme_key: String = "chaser"
+var color_body := Color(1.8, 0.5, 0.4)
+var color_core := Color(0.35, 0.06, 0.10)
 var color_rim := Color(2.6, 0.8, 0.5)
 var color_health := Color(2.0, 0.4, 0.3, 0.8)
 
@@ -54,9 +58,18 @@ func _ready() -> void:
 	add_to_group("enemies")
 	health = max_health
 	_pulse = randf() * TAU
+	_apply_theme()
 	var p: Node = get_parent()
 	if p != null and "damage_mult" in p:
 		_mods = p
+
+
+func _apply_theme() -> void:
+	color_body = TP.P[theme_key + "_body"]
+	color_rim = TP.P[theme_key + "_rim"]
+	color_core = Color(color_body.r * 0.15, color_body.g * 0.15, color_body.b * 0.15, 1.0)
+	color_health = Color(color_rim.r, color_rim.g, color_rim.b, 0.8)
+	queue_redraw()
 
 
 func set_target(t: Node2D) -> void:

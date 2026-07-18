@@ -39,6 +39,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_phase.request_restart()
 		elif event.keycode == KEY_M and get_tree().paused:
 			_phase.go_to_menu()
+		elif event.keycode == KEY_T and not get_tree().paused:
+			_phase.cycle_theme()
 	elif event is InputEventJoypadButton and event.pressed:
 		if event.button_index == JOY_BUTTON_START:
 			_phase.toggle_pause()

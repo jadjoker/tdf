@@ -14,17 +14,11 @@ var target: Node2D = null
 var orbit_slot: int = 0                       # ring position, assigned by angle when orbit forms
 var follow_offset_norm: Vector2 = Vector2.ZERO # persistent unit offset (unit disc), scaled by follow_spread
 
-# Palette — values above 1.0 are HDR and bloom under the glow environment.
-# Collected units are RENDERED BY PHASE1'S MULTIMESH (perf pass B), which bakes
-# the swarm palette into a shared texture; only strays draw themselves (once).
-# Strays are unlit embers of the swarm palette — clearly the same species,
-# clearly waiting to be lit (screenshot review: gray-blue read as dull bubbles)
-const COLOR_STRAY := Color(0.16, 0.34, 0.26, 1.0)
-const COLOR_SWARM := Color(0.55, 2.40, 1.30, 1.0)
-const RIM_STRAY := Color(0.38, 0.85, 0.58, 1.0)
-const RIM_SWARM := Color(0.90, 3.00, 1.80, 1.0)
-const HIGHLIGHT_STRAY := Color(0.45, 0.90, 0.65, 0.30)
-const HIGHLIGHT_SWARM := Color(1.40, 2.80, 2.00, 0.30)
+# Palette comes from the active theme (theme_palette.gd) — values above 1.0
+# are HDR and bloom. Collected units are RENDERED BY PHASE1'S MULTIMESH
+# (perf pass B), which bakes the swarm palette into a shared texture; only
+# strays draw themselves (once). Strays are unlit embers of the swarm palette.
+const TP = preload("res://scripts/theme_palette.gd")
 
 # Spring-driven squash & stretch (same system as the player ball)
 const STRETCH_MAX := 0.8           # stretch target at full speed
@@ -89,9 +83,9 @@ func _draw() -> void:
 	# Collected units return early (the MultiMesh renders them).
 	if is_collected:
 		return
-	draw_circle(Vector2.ZERO, radius, COLOR_STRAY, true, -1.0, true)
-	draw_circle(Vector2(-radius * 0.25, -radius * 0.28), radius * 0.42, HIGHLIGHT_STRAY, true, -1.0, true)
-	draw_circle(Vector2.ZERO, radius, RIM_STRAY, false, 1.5, true)
+	draw_circle(Vector2.ZERO, radius, TP.P["stray_body"], true, -1.0, true)
+	draw_circle(Vector2(-radius * 0.25, -radius * 0.28), radius * 0.42, TP.P["stray_hi"], true, -1.0, true)
+	draw_circle(Vector2.ZERO, radius, TP.P["stray_rim"], false, 1.5, true)
 
 
 func _on_body_entered(body: Node) -> void:

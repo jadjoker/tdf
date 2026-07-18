@@ -6,7 +6,7 @@ extends Node2D
 
 const GS = preload("res://scripts/game_settings.gd")
 const UIS = preload("res://scripts/ui_style.gd")
-const _FollowerScript = preload("res://scripts/followerunit.gd")
+const TP = preload("res://scripts/theme_palette.gd")
 
 const AMBIENT_COUNT := 56
 
@@ -26,17 +26,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _ready() -> void:
 	GS.apply_saved()
+	TP.apply_saved()
 
 	var cam := Camera2D.new()
 	add_child(cam)
 
 	var env := Environment.new()
-	env.glow_enabled = true
-	env.glow_intensity = 1.0
-	env.glow_strength = 1.05
-	env.glow_bloom = 0.05
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
-	env.glow_hdr_threshold = 1.1
+	TP.apply_environment(env)
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -49,16 +45,17 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	# Title breathes gently in the bloom
+	# Title breathes gently in the bloom, in the theme's accent
 	if _title != null:
 		var pulse: float = 1.0 + sin(_t * 1.3) * 0.10
-		_title.modulate = Color(0.6 * pulse, 2.6 * pulse, 1.5 * pulse)
+		var ac: Color = TP.P["ui_accent"]
+		_title.modulate = Color(ac.r * pulse * 1.1, ac.g * pulse * 1.1, ac.b * pulse * 1.1)
 	queue_redraw()
 
 
 func _draw() -> void:
 	# Ambient murmuration: deterministic per-index orbits with sine wobble
-	var c: Color = _FollowerScript.COLOR_SWARM
+	var c: Color = TP.P["swarm_body"]
 	for i in range(AMBIENT_COUNT):
 		var fi := float(i)
 		var radius: float = 170.0 + fmod(fi * 47.0, 190.0)
@@ -171,6 +168,21 @@ func _build_ui() -> void:
 	vs.add_theme_color_override("font_color", UIS.TEXT)
 	vs.toggled.connect(_on_vsync)
 	settings_box.add_child(vs)
+
+	var theme_label := Label.new()
+	theme_label.text = "Theme"
+	theme_label.modulate = UIS.TEXT
+	settings_box.add_child(theme_label)
+
+	var theme_opt := OptionButton.new()
+	var theme_names: Array = TP.names()
+	for n in theme_names:
+		theme_opt.add_item(String(n).capitalize())
+	theme_opt.select(theme_names.find(TP.current_name))
+	theme_opt.item_selected.connect(func(idx: int) -> void:
+		TP.set_theme(theme_names[idx])
+		get_tree().reload_current_scene())   # restyle everything in the new identity
+	settings_box.add_child(theme_opt)
 
 	var back := Button.new()
 	back.text = "BACK"

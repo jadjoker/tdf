@@ -4,7 +4,7 @@ extends Node2D
 # Replaces 100 individual Line2D nodes (each of which re-tessellated its own
 # geometry every update) with one _draw() pass — perf pass B.
 
-const _FollowerScript = preload("res://scripts/followerunit.gd")
+const TP = preload("res://scripts/theme_palette.gd")
 
 const TRAIL_LENGTH := 8      # points per trail, recorded at 30 Hz (~0.27s)
 const TRAIL_WIDTH := 9.0
@@ -22,8 +22,12 @@ func _ready() -> void:
 	var mat := CanvasItemMaterial.new()
 	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	material = mat
+	rebuild_ramps()
 
-	var c: Color = _FollowerScript.COLOR_SWARM
+
+func rebuild_ramps() -> void:
+	# Called on theme switch too — trails follow the active swarm color
+	var c: Color = TP.P["swarm_body"]
 	for count in range(2, TRAIL_LENGTH + 1):
 		var ramp := PackedColorArray()
 		ramp.resize(count)
