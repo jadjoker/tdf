@@ -1,0 +1,41 @@
+"AppBuild"
+{
+	// Fill in after creating the app in Steamworks (partner.steamgames.com).
+	// Steam assigns AppID; depot IDs are typically AppID+1, AppID+2, ...
+	"AppID" "REPLACE_WITH_APP_ID"
+	"Desc" "Murmuration v0.3.0"
+
+	// Where steamcmd writes build logs/cache (relative to this file)
+	"BuildOutput" "output\"
+
+	// Content root: the exported builds (relative to this file)
+	"ContentRoot" "..\build\"
+
+	// Uploads land on the default branch; set live from the Steamworks
+	// site (Builds page) after verifying — never auto-set live from here.
+	"SetLive" ""
+
+	"Depots"
+	{
+		// Windows depot
+		"REPLACE_WITH_WINDOWS_DEPOT_ID"
+		{
+			"FileMapping"
+			{
+				"LocalPath" "windows\*"
+				"DepotPath" "."
+				"Recursive" "1"
+			}
+		}
+		// Linux depot (also serves Steam Deck)
+		"REPLACE_WITH_LINUX_DEPOT_ID"
+		{
+			"FileMapping"
+			{
+				"LocalPath" "linux\*"
+				"DepotPath" "."
+				"Recursive" "1"
+			}
+		}
+	}
+}

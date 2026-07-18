@@ -276,12 +276,13 @@ func _build_perf_hud() -> void:
 	UIS.outline(_kills_label, 6)
 	layer.add_child(_kills_label)
 
-	# Dev perf readout: bottom-left, small and dim
+	# Dev perf readout: bottom-left, small and dim; hidden in release builds
 	_perf_label = Label.new()
 	_perf_label.add_theme_font_size_override("font_size", 11)
 	_perf_label.modulate = Color(0.8, 0.9, 1.0, 0.45)
 	_perf_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	_perf_label.position += Vector2(10.0, -24.0)
+	_perf_label.visible = OS.is_debug_build()
 	layer.add_child(_perf_label)
 
 

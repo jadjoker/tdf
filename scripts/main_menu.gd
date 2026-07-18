@@ -110,6 +110,15 @@ func _build_ui() -> void:
 		best.position += Vector2(0.0, -98.0)
 		layer.add_child(best)
 
+	# Version tag, bottom-right (support/bug-report anchor)
+	var ver := Label.new()
+	ver.text = "v%s" % ProjectSettings.get_setting("application/config/version", "dev")
+	ver.add_theme_font_size_override("font_size", 12)
+	ver.modulate = Color(UIS.TEXT_DIM.r, UIS.TEXT_DIM.g, UIS.TEXT_DIM.b, 0.6)
+	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	ver.position += Vector2(-64.0, -28.0)
+	layer.add_child(ver)
+
 	# Main buttons
 	_menu_box = VBoxContainer.new()
 	_menu_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)

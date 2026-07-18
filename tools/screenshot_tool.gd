@@ -26,6 +26,12 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	_frames += 1
+	# Store/marketing captures never want the dev perf readout
+	if _frames == 30 and current_scene != null:
+		var ph: Node = current_scene.get_node_or_null("Phase1")
+		if ph != null and ph._perf_label != null:
+			ph._perf_label.visible = false
+
 	if _frames == 45 and _forced_screen != "" and current_scene != null:
 		var phase: Node = current_scene.get_node_or_null("Phase1")
 		if phase != null:
