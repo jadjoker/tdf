@@ -259,9 +259,13 @@ scope-small-polish-hard (same principle as Swarm Director's bible).
   speed), Wider Net (+15% recruit reach), Magnet Heart (stray attraction, +150/stack),
   Patient Hunter (+0.5s combo), Bountiful Kills (+1 loot). Cards pause the run,
   keys 1/2/3 or click. Still open: unlock track across runs, endless + timed modes
-- **v0.4 — shippable shell:** audio (biggest missing juice channel), main menu,
-  pause, settings (volume/fullscreen/vsync), rebindable keys, controller + Steam Deck
-  support (pointer steering already covers touch)
+- **v0.4 — shippable shell:** ✅ mostly built Jul 2026 — audio (v0.2), main menu
+  (`main_menu.gd`: procedural title screen with ambient decorative flock, best-run
+  line, BEGIN/SETTINGS/QUIT with controller focus nav), settings (volume/fullscreen/
+  vsync persisted to save.cfg [settings] via `game_settings.gd`, applied on boot),
+  pause (Esc/Start) with R-restart and M-to-menu, gamepad (left stick movement,
+  Start pause, A restart, focus-nav upgrade cards), 1280×720 canvas_items stretch
+  (Steam Deck ready). Still open: rebindable keys (post-playtest)
 - **v0.5 — DEMO build:** first 10 minutes, polished to death; this is the marketing
 - **v1.0 — launch:** 3–5 hours of content depth, achievements, launch discount
 

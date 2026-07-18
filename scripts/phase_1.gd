@@ -124,6 +124,7 @@ var _total_units: int = 0
 func _ready() -> void:
 	randomize()
 	_run_start_ms = Time.get_ticks_msec()
+	preload("res://scripts/game_settings.gd").apply_saved()
 	_load_save()
 	spawn_followers()
 	_build_swarm_renderers()
@@ -531,7 +532,9 @@ func _load_save() -> void:
 
 
 func _write_save() -> void:
+	# Load-modify-save: the same file holds [settings] — don't clobber it
 	var cfg := ConfigFile.new()
+	cfg.load(SAVE_PATH)
 	cfg.set_value("run", "best_score", best_score)
 	cfg.set_value("run", "best_time_s", best_time_s)
 	cfg.save(SAVE_PATH)
@@ -586,7 +589,7 @@ func _trigger_game_over() -> void:
 	layer.add_child(stats)
 
 	var hint := Label.new()
-	hint.text = "Press R — or tap — to lead a new murmuration"
+	hint.text = "R or tap — fly again        M — menu"
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.modulate = Color(0.6, 0.65, 0.75)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -639,6 +642,8 @@ func _show_upgrade_choice() -> void:
 		btn.position += Vector2(-(card_w * 1.5 + gap) + float(i) * (card_w + gap), -card_h * 0.5)
 		btn.pressed.connect(pick_upgrade.bind(i))
 		_upgrade_layer.add_child(btn)
+		if i == 0:
+			btn.grab_focus()   # controller: dpad/stick between cards, A to pick
 
 
 func pick_upgrade(index: int) -> void:
@@ -694,7 +699,7 @@ func toggle_pause() -> void:
 		_pause_layer.add_child(overlay)
 
 		var lbl := Label.new()
-		lbl.text = "PAUSED\n\nEsc — resume        R — restart"
+		lbl.text = "PAUSED\n\nEsc — resume        R — restart        M — menu"
 		lbl.add_theme_font_size_override("font_size", 28)
 		lbl.modulate = Color(0.9, 0.95, 1.1)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

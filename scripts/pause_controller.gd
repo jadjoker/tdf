@@ -17,15 +17,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		var restart := false
 		if event is InputEventKey and event.pressed and event.keycode == KEY_R:
 			restart = true
-		# Tap/click restart, delayed so the death click doesn't skip the screen
-		elif event is InputEventMouseButton and event.pressed \
-				and Time.get_ticks_msec() - _phase._game_over_at_ms > 800:
+		elif event is InputEventKey and event.pressed and event.keycode == KEY_M:
+			_go_to_menu()
+			return
+		# Tap/click/gamepad-A restart, delayed so the death input doesn't skip the screen
+		elif (event is InputEventMouseButton or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_A)) \
+				and event.pressed and Time.get_ticks_msec() - _phase._game_over_at_ms > 800:
 			restart = true
 		if restart:
 			_phase.request_restart()
 		return
 
-	# Upgrade cards: 1/2/3 pick (clicks work too — the layer is ALWAYS-mode)
+	# Upgrade cards: 1/2/3 pick; clicks and controller focus-navigation (dpad/stick
+	# + A) also work because the layer is ALWAYS-mode and the first card grabs focus
 	if _phase._upgrade_layer != null:
 		if event is InputEventKey and event.pressed:
 			match event.keycode:
@@ -39,3 +43,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_phase.toggle_pause()
 		elif event.keycode == KEY_R and get_tree().paused:
 			_phase.request_restart()
+		elif event.keycode == KEY_M and get_tree().paused:
+			_go_to_menu()
+	elif event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_START:
+		_phase.toggle_pause()
+
+
+func _go_to_menu() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
