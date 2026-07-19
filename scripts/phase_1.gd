@@ -98,6 +98,10 @@ const UPGRADE_POOL := [
 	{"id": "magnet", "name": "Magnet Heart", "desc": "Strays drift toward you (+150 range)", "color": Color(1.8, 0.7, 2.2)},
 	{"id": "combo", "name": "Patient Hunter", "desc": "+0.5s combo window", "color": Color(2.2, 1.8, 0.6)},
 	{"id": "loot", "name": "Bountiful Kills", "desc": "Kills drop +1 extra stray", "color": Color(1.6, 2.2, 0.5)},
+	# Build-defining picks — these change HOW you fly, not just numbers
+	{"id": "wake", "name": "Burning Wake", "desc": "Your flight path lingers as a burning ribbon", "color": Color(2.4, 1.2, 0.3)},
+	{"id": "welcome", "name": "Warm Welcome", "desc": "Recruits detonate a concussive greeting", "color": Color(0.9, 2.2, 0.7)},
+	{"id": "comet", "name": "Comet Core", "desc": "YOU damage enemies on contact — at speed", "color": Color(1.9, 1.1, 2.4)},
 ]
 
 var damage_mult: float = 1.0         # read by enemies each contact frame
@@ -105,10 +109,19 @@ var unit_speed_mult: float = 1.0
 var magnet_radius: float = 0.0
 var loot_bonus: int = 0
 var combo_window: float = 1.6
+var wake_level: int = 0              # Burning Wake stacks
+var welcome_level: int = 0           # Warm Welcome stacks
+var comet_level: int = 0             # Comet Core stacks
 var upgrade_level: int = 0
 var _kills_to_next: int = 8
 var _upgrade_layer: CanvasLayer = null
 var _upgrade_offer: Array = []
+var _wake: Node2D = null
+
+const WAKE_DPS := 30.0               # per stack, per burning point touched
+const WAKE_RADIUS := 45.0
+const COMET_DPS := 60.0              # per stack at full speed
+const COMET_MIN_SPEED := 250.0
 
 # Physics-juice pass: impact feedback systems
 const SHOCKWAVE_RADIUS := 160.0      # death blast physically ripples the flock
@@ -141,6 +154,13 @@ func _ready() -> void:
 	var pause_ctl := preload("res://scripts/pause_controller.gd").new()
 	pause_ctl.name = "PauseController"
 	add_child(pause_ctl)
+
+	# First-flight onboarding, until the player lands their first kill ever
+	var cfg := preload("res://scripts/game_settings.gd").load_all()
+	if not cfg.get_value("settings", "onboarded", false):
+		var ob := preload("res://scripts/onboarding.gd").new()
+		ob.name = "Onboarding"
+		add_child(ob)
 	if perf_logging:
 		_perf_logger = preload("res://scripts/perf_logger.gd").new()
 		add_child(_perf_logger)
@@ -423,8 +443,29 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 			_enemy_spawn_timer = interval
 			_spawn_enemy(minutes)
 
+	# Burning Wake: the player's lingering path damages enemies crossing it
+	if _wake != null and wake_level > 0:
+		_wake.track(player.global_position, delta)
+
 	for e in enemies:
 		e.process_flock_contact(swarm_units, delta)
+
+		if not is_instance_valid(e):
+			continue
+
+		if _wake != null and wake_level > 0:
+			for p in _wake.points:
+				if e.global_position.distance_to(p.pos) < WAKE_RADIUS:
+					e.take_external_damage(WAKE_DPS * wake_level * delta)
+					break
+
+		# Comet Core: the leader itself is a weapon — at speed
+		if comet_level > 0 and is_instance_valid(e):
+			var pspeed: float = player.velocity.length()
+			if pspeed > COMET_MIN_SPEED \
+					and e.global_position.distance_to(player.global_position) < e.body_radius + 28.0:
+				var frac: float = clampf(pspeed / 500.0, 0.0, 1.0)
+				e.take_external_damage(COMET_DPS * comet_level * frac * delta)
 
 	_resolve_enemy_collisions(swarm_units, enemies)
 
@@ -510,6 +551,29 @@ func _pick_enemy_scene(minutes: float) -> PackedScene:
 	if r < 0.34 + tail_biter_chance:
 		return tail_biter_scene if collected_count >= 5 else enemy_scene
 	return enemy_scene
+
+
+func on_unit_collected(pos: Vector2) -> void:
+	# Warm Welcome: every recruit detonates a concussive greeting
+	if welcome_level <= 0:
+		return
+	var radius: float = 120.0 + 30.0 * float(welcome_level)
+	var dmg: float = 30.0 * float(welcome_level)
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(e):
+			continue
+		var d: Vector2 = e.global_position - pos
+		var dist: float = d.length()
+		if dist < radius:
+			e.take_external_damage(dmg)
+			if is_instance_valid(e) and dist > 0.001:
+				e.apply_grind((d / dist) * 420.0)
+	add_trauma(0.12)
+	var burst: Node2D = preload("res://scripts/hit_burst.gd").new()
+	burst.color = Color(0.9, 2.2, 0.7)
+	burst.scale_mult = 0.8
+	add_child(burst)
+	burst.global_position = pos
 
 
 func _on_unit_eaten(pos: Vector2) -> void:
@@ -816,6 +880,16 @@ func pick_upgrade(index: int) -> void:
 			combo_window += 0.5
 		"loot":
 			loot_bonus += 1
+		"wake":
+			wake_level += 1
+			if _wake == null:
+				_wake = preload("res://scripts/wake_renderer.gd").new()
+				_wake.name = "WakeRenderer"
+				add_child(_wake)
+		"welcome":
+			welcome_level += 1
+		"comet":
+			comet_level += 1
 
 	_upgrade_layer.queue_free()
 	_upgrade_layer = null

@@ -155,6 +155,16 @@ func process_flock_contact(swarm_units: Array, delta: float) -> void:
 			_die()
 
 
+# Damage from non-flock sources (Burning Wake, Warm Welcome, Comet Core)
+func take_external_damage(amount: float) -> void:
+	if health <= 0.0:
+		return
+	health -= amount
+	_flash = maxf(_flash, 0.7)
+	if health <= 0.0:
+		_die()
+
+
 func _die() -> void:
 	remove_from_group("enemies")
 	died.emit(self)

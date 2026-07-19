@@ -111,3 +111,8 @@ func _on_body_entered(body: Node) -> void:
 		# (the trail renderer and MultiMesh pick it up from this group)
 		remove_from_group("stray")
 		add_to_group("swarm_unit")
+
+		# Tell Phase1 where the recruit happened (Warm Welcome, onboarding)
+		var p: Node = get_parent()
+		if p != null and p.has_method("on_unit_collected"):
+			p.on_unit_collected(global_position)

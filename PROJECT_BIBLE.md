@@ -270,7 +270,12 @@ scope-small-polish-hard (same principle as Swarm Director's bible).
   thresholds (8, +8+6/level): Pointier Flock (+20% dmg), Swift Current (+10% unit
   speed), Wider Net (+15% recruit reach), Magnet Heart (stray attraction, +150/stack),
   Patient Hunter (+0.5s combo), Bountiful Kills (+1 loot). Cards pause the run,
-  keys 1/2/3 or click. Still open: unlock track across runs, endless + timed modes
+  keys 1/2/3 or click. **Build-defining trio added:** Burning Wake (flight path
+  lingers as damaging ribbon — `wake_renderer.gd`), Warm Welcome (recruits detonate:
+  damage + radial shove), Comet Core (the leader damages on contact above 250 px/s,
+  scaling with speed). **Onboarding:** three do-to-dismiss prompts on first flights
+  (`onboarding.gd`), gone forever after the first-ever kill (settings/onboarded).
+  Still open: unlock track across runs, endless + timed modes
 - **v0.4 — shippable shell:** ✅ mostly built Jul 2026 — audio (v0.2), main menu
   (`main_menu.gd`: procedural title screen with ambient decorative flock, best-run
   line, BEGIN/SETTINGS/QUIT with controller focus nav), settings (volume/fullscreen/
