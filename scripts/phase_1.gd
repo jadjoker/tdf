@@ -123,6 +123,82 @@ const WAKE_RADIUS := 45.0
 const COMET_DPS := 60.0              # per stack at full speed
 const COMET_MIN_SPEED := 250.0
 
+# Flock verbs (playtest: travel time felt passive — these are active
+# control vocabulary usable mid-flight)
+const SLING_CHARGE_TIME := 0.6       # hold time to reach full power
+const SLING_IMPULSE_MIN := 1100.0
+const SLING_IMPULSE_MAX := 2000.0
+const SLING_BALLISTIC_TIME := 0.45   # follow forces nearly off while the spear flies
+const PULSE_COOLDOWN := 4.0
+const PULSE_UNIT_KICK := 750.0       # outward burst speed for own units
+const PULSE_RADIUS := 260.0
+const PULSE_ENEMY_KICK := 520.0
+
+var _sling_charging: bool = false
+var _sling_charge: float = 0.0
+var _sling_ballistic: float = 0.0
+var _pulse_cd: float = 0.0
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _game_over or get_tree().paused:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.pressed:
+			_sling_charging = true
+		elif _sling_charging:
+			var aim: Vector2 = (get_global_mouse_position() - player.global_position).normalized()
+			_release_sling(aim if aim.length() > 0.5 else _player_dir)
+	elif event is InputEventJoypadButton:
+		if event.button_index == JOY_BUTTON_RIGHT_SHOULDER:
+			if event.pressed:
+				_sling_charging = true
+			elif _sling_charging:
+				_release_sling(_player_dir if _player_dir != Vector2.ZERO else Vector2.RIGHT)
+		elif event.button_index == JOY_BUTTON_B and event.pressed:
+			_do_pulse()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
+		_do_pulse()
+
+
+func _release_sling(aim: Vector2) -> void:
+	_sling_charging = false
+	var power: float = lerpf(SLING_IMPULSE_MIN, SLING_IMPULSE_MAX, _sling_charge)
+	_sling_charge = 0.0
+	_sling_ballistic = SLING_BALLISTIC_TIME
+	for u in get_tree().get_nodes_in_group("swarm_unit"):
+		if not is_instance_valid(u):
+			continue
+		u.vel = aim * power + u.follow_offset_norm * 220.0
+	play_sfx("whip", 0.6)
+	add_trauma(0.12)
+
+
+func _do_pulse() -> void:
+	if _pulse_cd > 0.0:
+		return
+	_pulse_cd = PULSE_COOLDOWN
+	var center: Vector2 = player.global_position
+	for u in get_tree().get_nodes_in_group("swarm_unit"):
+		if not is_instance_valid(u):
+			continue
+		var d: Vector2 = u.global_position - center
+		u.vel += (d.normalized() if d.length() > 1.0 else Vector2.RIGHT.rotated(randf() * TAU)) * PULSE_UNIT_KICK
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(e):
+			continue
+		var de: Vector2 = e.global_position - center
+		if de.length() < PULSE_RADIUS and de.length() > 0.001:
+			e.apply_grind(de.normalized() * PULSE_ENEMY_KICK)
+			e.take_external_damage(10.0)
+	var burst: Node2D = preload("res://scripts/hit_burst.gd").new()
+	burst.color = UIS.MINT
+	burst.scale_mult = 1.3
+	add_child(burst)
+	burst.global_position = center
+	play_sfx("kill", 1.35)
+	add_trauma(0.2)
+
 # Physics-juice pass: impact feedback systems
 const SHOCKWAVE_RADIUS := 160.0      # death blast physically ripples the flock
 const SHOCKWAVE_POWER := 900.0
@@ -364,12 +440,20 @@ func _physics_process(delta: float) -> void:
 	# Smooth the noisy per-frame speed so mode switching doesn't flicker
 	_smoothed_speed = lerpf(_smoothed_speed, player_speed, 1.0 - exp(-speed_smoothing * delta))
 
+	# Flock-verb timers
+	if _sling_charging:
+		_sling_charge = minf(_sling_charge + delta / SLING_CHARGE_TIME, 1.0)
+	_sling_ballistic = maxf(_sling_ballistic - delta, 0.0)
+	_pulse_cd = maxf(_pulse_cd - delta, 0.0)
+
 	# Ring only forms after a short continuous stillness (quick taps don't flash it)
 	if _smoothed_speed < idle_speed_threshold:
 		_idle_time += delta
 	else:
 		_idle_time = 0.0
-	var is_idle: bool = _idle_time >= orbit_engage_delay
+	# Charging or a flying spear overrides the ring — the flock is busy
+	var is_idle: bool = _idle_time >= orbit_engage_delay \
+		and not _sling_charging and _sling_ballistic <= 0.0
 
 	var slots_reassigned := false
 	var t_sim: int = Time.get_ticks_usec()
@@ -958,6 +1042,13 @@ func toggle_pause() -> void:
 		_overlay_button(box, "MENU", go_to_menu)
 		resume.grab_focus()
 
+		var controls := Label.new()
+		controls.text = "hold RIGHT-CLICK / RB — sling the flock        Space / B — pulse"
+		controls.add_theme_font_size_override("font_size", 13)
+		controls.modulate = UIS.TEXT_DIM
+		controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(controls)
+
 		var hint := Label.new()
 		hint.text = "Esc · R · M"
 		hint.add_theme_font_size_override("font_size", 12)
@@ -1018,16 +1109,27 @@ func _update_swarm_follow(swarm_units: Array, delta: float) -> void:
 	# Shared target trails behind the player's motion; each unit adds its own
 	# persistent offset so the swarm flows as a teardrop instead of a bunched dot
 	var base_target: Vector2 = player.global_position - _player_dir * trail_distance
+	var strength_mult: float = 1.0
+	var spread_mult: float = 1.0
+
+	if _sling_charging:
+		# Coil: the flock compresses hard around the player — visible charge-up
+		base_target = player.global_position
+		strength_mult = 2.5
+		spread_mult = 0.25
+	elif _sling_ballistic > 0.0:
+		# Spear in flight: barely reeled in until the ballistic window ends
+		strength_mult = 0.12
 
 	for u in swarm_units:
-		var target_pos: Vector2 = base_target + u.follow_offset_norm * follow_spread
+		var target_pos: Vector2 = base_target + u.follow_offset_norm * follow_spread * spread_mult
 		var pos: Vector2 = u.global_position
 		var to_target: Vector2 = target_pos - pos
 		var dist: float = to_target.length()
 
 		if dist > 0.01:
 			var dir: Vector2 = to_target / dist
-			u.vel += dir * u.strength * delta
+			u.vel += dir * u.strength * strength_mult * delta
 
 		# Apply friction
 		u.vel *= friction

@@ -156,6 +156,25 @@ towerdefense/
 
 ---
 
+## Flock Verbs (added Jul 2026 — playtest: "travel time is boring")
+
+Two active commands fill the dead air between moving and ring-forming, both
+temporary modifiers on the sacred follow physics (never replacements):
+
+- **Sling** — hold RMB / RB: flock coils tight around the player
+  (strength ×2.5, spread ×0.25 — visible anticipation), release: every unit
+  launched at `SLING_IMPULSE_MIN..MAX` (1100–2000 by charge, 0.6s to full)
+  toward cursor (mouse) or facing (pad); follow forces drop to 12% for
+  `SLING_BALLISTIC_TIME` (0.45s) so the spear flies. Speed-is-damage does the rest.
+- **Pulse** — Space / B, 4s cooldown: radial `PULSE_UNIT_KICK` (750) to own
+  units + `PULSE_ENEMY_KICK` shove and 10 chip damage to enemies within 260.
+  Defensive burst; counters biter lunges; springs reel the bloom back in.
+
+Charging or ballistic flight suppresses ring formation (the flock is busy).
+Pause screen lists the controls.
+
+---
+
 ## Gameplay Direction — Momentum Combat (decided Jul 2026)
 
 **Fantasy:** you lead a murmuration — anything that touches it gets flayed by the current.
