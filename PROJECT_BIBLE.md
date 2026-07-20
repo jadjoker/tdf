@@ -156,6 +156,21 @@ towerdefense/
 
 ---
 
+## Roguelite Loop (v0.4.0, Jul 2026 — "I want it to be a roguelike")
+
+Run → death → **Embers** banked (score/10 + Sovereign bounties) → spend in
+**The Roost** (main-menu meta shop, `meta_progress.gd`, save.cfg [meta]) →
+stronger next run. Perks (3 levels each): Head Start (begin with 10 units
+flocked/lvl), Sharp Flock (+10% damage/lvl), Swift Blood (+5% unit speed/lvl),
+Rich Air (+25 strays/lvl).
+
+**The Sovereign** (`sovereign.gd`, extends tank): descends at 2:30 then every
+~2:10 — 1400 HP (+20%/min), radius 46, near-immovable, plows everything.
+Bounty: 8 strays + 50 Embers + fanfare. Center-screen announce system
+(`_announce`) heralds arrivals and bounties.
+
+---
+
 ## Flock Verbs (added Jul 2026 — playtest: "travel time is boring")
 
 Two active commands fill the dead air between moving and ring-forming, both

@@ -33,6 +33,7 @@ var push_share: float = 0.75    # fraction of unit-overlap the ENEMY absorbs (lo
 var plow_kick: float = 0.0      # velocity imparted to units per px of overlap (bowling pins)
 var knock_resist: float = 0.0   # 0..1 — resistance to grind/knockback impulses
 var stray_drop: int = 1         # strays left behind on death (also score weight)
+var ember_bonus: int = 0        # meta-currency bounty (Sovereigns)
 
 signal died(enemy)
 

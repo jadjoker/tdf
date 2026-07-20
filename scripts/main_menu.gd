@@ -7,21 +7,29 @@ extends Node2D
 const GS = preload("res://scripts/game_settings.gd")
 const UIS = preload("res://scripts/ui_style.gd")
 const TP = preload("res://scripts/theme_palette.gd")
+const MP = preload("res://scripts/meta_progress.gd")
 
 const AMBIENT_COUNT := 56
 
 var _t: float = 0.0
 var _menu_box: VBoxContainer
 var _settings_panel: PanelContainer
+var _roost_panel: PanelContainer
+var _roost_embers: Label
+var _roost_rows: Dictionary = {}    # perk id -> {level: Label, btn: Button}
+var _roost_back_btn: Button
 var _begin_btn: Button
 var _vol_slider: HSlider
 var _title: Label
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# B / Esc backs out of settings (Deck convention)
-	if event.is_action_pressed("ui_cancel") and _settings_panel != null and _settings_panel.visible:
-		_on_settings_back()
+	# B / Esc backs out of sub-panels (Deck convention)
+	if event.is_action_pressed("ui_cancel"):
+		if _settings_panel != null and _settings_panel.visible:
+			_on_settings_back()
+		elif _roost_panel != null and _roost_panel.visible:
+			_on_roost_back()
 
 
 func _ready() -> void:
@@ -128,9 +136,12 @@ func _build_ui() -> void:
 	layer.add_child(_menu_box)
 
 	_begin_btn = _menu_button("BEGIN", _on_begin)
+	_menu_button("THE ROOST", _on_roost)
 	_menu_button("SETTINGS", _on_settings)
 	_menu_button("QUIT", _on_quit)
 	_begin_btn.grab_focus()   # controller/keyboard navigation works out of the box
+
+	_build_roost(layer)
 
 	# Settings panel (hidden until opened)
 	_settings_panel = UIS.centered_panel(UIS.MINT)
@@ -198,6 +209,113 @@ func _build_ui() -> void:
 	UIS.style_button(back, UIS.MINT, 18)
 	back.pressed.connect(_on_settings_back)
 	settings_box.add_child(back)
+
+
+func _build_roost(layer: CanvasLayer) -> void:
+	_roost_panel = UIS.centered_panel(UIS.GOLD)
+	_roost_panel.visible = false
+	layer.add_child(_roost_panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	box.custom_minimum_size = Vector2(520.0, 0.0)
+	_roost_panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "THE ROOST"
+	title.add_theme_font_size_override("font_size", 26)
+	title.modulate = UIS.GOLD
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	_roost_embers = Label.new()
+	_roost_embers.add_theme_font_size_override("font_size", 15)
+	_roost_embers.modulate = Color(2.4, 1.4, 0.5)
+	_roost_embers.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_roost_embers)
+
+	for id in MP.PERKS:
+		var perk: Dictionary = MP.PERKS[id]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		box.add_child(row)
+
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(info)
+
+		var name_lbl := Label.new()
+		name_lbl.text = perk["name"]
+		name_lbl.add_theme_font_size_override("font_size", 16)
+		name_lbl.modulate = UIS.TEXT
+		info.add_child(name_lbl)
+
+		var desc_lbl := Label.new()
+		desc_lbl.text = perk["desc"]
+		desc_lbl.add_theme_font_size_override("font_size", 12)
+		desc_lbl.modulate = UIS.TEXT_DIM
+		info.add_child(desc_lbl)
+
+		var lvl_lbl := Label.new()
+		lvl_lbl.add_theme_font_size_override("font_size", 14)
+		lvl_lbl.modulate = UIS.GOLD
+		row.add_child(lvl_lbl)
+
+		var buy := Button.new()
+		UIS.style_button(buy, UIS.GOLD, 14)
+		buy.custom_minimum_size = Vector2(120.0, 38.0)
+		buy.pressed.connect(_on_roost_buy.bind(id))
+		row.add_child(buy)
+
+		_roost_rows[id] = {"level": lvl_lbl, "btn": buy}
+
+	var back := Button.new()
+	back.text = "BACK"
+	UIS.style_button(back, UIS.GOLD, 16)
+	back.pressed.connect(_on_roost_back)
+	box.add_child(back)
+	_roost_back_btn = back
+
+
+func _refresh_roost() -> void:
+	_roost_embers.text = "%d Embers banked — earn more by flying" % MP.embers()
+	for id in _roost_rows:
+		var refs: Dictionary = _roost_rows[id]
+		var lvl: int = MP.perk(id)
+		var maxed: bool = lvl >= int(MP.PERKS[id]["max"])
+		refs["level"].text = "Lv %d/%d" % [lvl, MP.PERKS[id]["max"]]
+		if maxed:
+			refs["btn"].text = "MAXED"
+			refs["btn"].disabled = true
+		else:
+			refs["btn"].text = "Buy — %d" % MP.cost(id)
+			refs["btn"].disabled = not MP.can_buy(id)
+
+
+func _on_roost() -> void:
+	_menu_box.visible = false
+	_refresh_roost()
+	_roost_panel.visible = true
+	# Focus the first affordable perk; if broke, BACK (never strand the pad)
+	var focused := false
+	for id in _roost_rows:
+		if not _roost_rows[id]["btn"].disabled:
+			_roost_rows[id]["btn"].grab_focus()
+			focused = true
+			break
+	if not focused and _roost_back_btn != null:
+		_roost_back_btn.grab_focus()
+
+
+func _on_roost_buy(id: String) -> void:
+	if MP.buy(id):
+		_refresh_roost()
+
+
+func _on_roost_back() -> void:
+	_roost_panel.visible = false
+	_menu_box.visible = true
+	_begin_btn.grab_focus()
 
 
 func _menu_button(label: String, handler: Callable) -> Button:

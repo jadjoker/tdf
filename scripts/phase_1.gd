@@ -90,6 +90,7 @@ var _score_tick: float = 0.0
 # offers 3 of these (all stack; multiplicative where sensible)
 const UIS = preload("res://scripts/ui_style.gd")
 const TP = preload("res://scripts/theme_palette.gd")
+const MP = preload("res://scripts/meta_progress.gd")
 
 const UPGRADE_POOL := [
 	{"id": "damage", "name": "Pointier Flock", "desc": "+20% contact damage", "color": Color(2.2, 0.8, 0.4)},
@@ -138,6 +139,12 @@ var _sling_charging: bool = false
 var _sling_charge: float = 0.0
 var _sling_ballistic: float = 0.0
 var _pulse_cd: float = 0.0
+
+# Roguelite layer: Embers earned this run, Sovereign boss cadence
+var run_embers: int = 0
+var _sovereign_timer: float = 150.0
+var _announce_label: Label = null
+var _announce_alpha: float = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -220,6 +227,12 @@ func _ready() -> void:
 	TP.apply_saved()
 	_apply_world_theme()
 	_load_save()
+
+	# Permanent Roost perks shape the run before anything spawns
+	damage_mult *= 1.0 + 0.10 * float(MP.perk("sharp_flock"))
+	unit_speed_mult *= 1.0 + 0.05 * float(MP.perk("swift_blood"))
+	follower_count += 25 * MP.perk("rich_air")
+
 	spawn_followers()
 	_build_swarm_renderers()
 	_build_perf_hud()
@@ -237,6 +250,16 @@ func _ready() -> void:
 		var ob := preload("res://scripts/onboarding.gd").new()
 		ob.name = "Onboarding"
 		add_child(ob)
+
+	# Head Start perk: the nearest strays are already yours
+	var hs: int = MP.perk("head_start") * 10
+	if hs > 0:
+		var strays: Array = get_tree().get_nodes_in_group("stray")
+		var anchor: Vector2 = player.global_position
+		strays.sort_custom(func(a, b):
+			return anchor.distance_squared_to(a.global_position) < anchor.distance_squared_to(b.global_position))
+		for i in range(mini(hs, strays.size())):
+			strays[i]._on_body_entered(player)
 	if perf_logging:
 		_perf_logger = preload("res://scripts/perf_logger.gd").new()
 		add_child(_perf_logger)
@@ -256,6 +279,10 @@ func _process(delta: float) -> void:
 		if _combo_timer <= 0.0:
 			_combo = 0
 			_update_kills_label()
+
+	if _announce_alpha > 0.0 and _announce_label != null:
+		_announce_alpha = maxf(_announce_alpha - delta * 0.55, 0.0)
+		_announce_label.modulate.a = minf(_announce_alpha, 1.0)
 
 
 func _build_swarm_renderers() -> void:
@@ -380,6 +407,17 @@ func _build_perf_hud() -> void:
 	_perf_label.position += Vector2(10.0, -24.0)
 	_perf_label.visible = OS.is_debug_build()
 	layer.add_child(_perf_label)
+
+	# Event announcements (Sovereign arrivals/bounties), center-high, self-fading
+	_announce_label = Label.new()
+	_announce_label.add_theme_font_size_override("font_size", 30)
+	_announce_label.modulate = Color(2.0, 1.6, 0.8, 0.0)
+	UIS.outline(_announce_label, 8)
+	_announce_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_announce_label.size = Vector2(1000.0, 40.0)
+	_announce_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_KEEP_SIZE)
+	_announce_label.position += Vector2(0.0, -200.0)
+	layer.add_child(_announce_label)
 
 
 func _update_perf_hud(delta: float) -> void:
@@ -518,6 +556,12 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 
 	# G5 difficulty curve: spawns quicken and the cap grows as minutes pass
 	var minutes: float = float(Time.get_ticks_msec() - _run_start_ms) / 60000.0
+
+	# The Sovereign descends on a cadence — every run gets boss rhythm
+	_sovereign_timer -= delta
+	if _sovereign_timer <= 0.0:
+		_sovereign_timer = 130.0
+		_spawn_sovereign(minutes)
 	var interval: float = maxf(enemy_spawn_interval / (1.0 + minutes * 0.35), 1.2)
 	var cap: int = mini(max_enemies + int(minutes * 2.0), 16)
 
@@ -623,6 +667,26 @@ func _spawn_enemy(minutes: float = 0.0) -> void:
 		e.ate_unit.connect(_on_unit_eaten)
 
 
+func _spawn_sovereign(minutes: float) -> void:
+	var e: Node2D = preload("res://scenes/Sovereign.tscn").instantiate()
+	add_child(e)
+	var a: float = randf() * TAU
+	e.global_position = player.global_position + Vector2(cos(a), sin(a)) * 1100.0
+	e.set_target(player)
+	e.max_health *= 1.0 + minutes * 0.2
+	e.health = e.max_health
+	e.died.connect(_on_enemy_died)
+	_announce("A  SOVEREIGN  DESCENDS")
+	play_sfx("lunge", 0.5)
+	add_trauma(0.25)
+
+
+func _announce(text: String) -> void:
+	if _announce_label != null:
+		_announce_label.text = text
+		_announce_alpha = 1.6   # holds ~1.7s then fades
+
+
 func _pick_enemy_scene(minutes: float) -> PackedScene:
 	# Roster unlocks over the run: chasers → biters (flock ≥5) → interceptors
 	# (1 min) → tanks (2 min). One roll, exclusive bands; a locked band falls
@@ -692,6 +756,12 @@ func _on_enemy_died(e) -> void:
 
 	var pos: Vector2 = e.global_position
 
+	# Sovereign bounty: instant Embers + fanfare
+	if e.ember_bonus > 0:
+		run_embers += e.ember_bonus
+		_announce("SOVEREIGN  DOWN   ·   +%d EMBERS" % e.ember_bonus)
+		add_trauma(0.3)
+
 	# Impact feedback scales with the chain
 	add_trauma(0.3 + 0.08 * float(_combo))
 	_hit_stop()
@@ -740,13 +810,15 @@ func _trigger_game_over() -> void:
 	Engine.time_scale = 1.0
 	play_sfx("gameover")
 
-	# Persist bests
+	# Persist bests + bank the run's Embers (roguelite loop)
 	var secs_run: int = int(float(Time.get_ticks_msec() - _run_start_ms) / 1000.0)
 	var new_best: bool = score > best_score
 	if new_best:
 		best_score = score
 	best_time_s = maxi(best_time_s, secs_run)
 	_write_save()
+	run_embers += score / 10
+	MP.add_embers(run_embers)
 
 	get_tree().paused = true
 
@@ -795,6 +867,13 @@ func _trigger_game_over() -> void:
 	stats.modulate = UIS.TEXT_DIM
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(stats)
+
+	var embers_lbl := Label.new()
+	embers_lbl.text = "+%d Embers gathered   ·   Roost holds %d" % [run_embers, MP.embers()]
+	embers_lbl.add_theme_font_size_override("font_size", 17)
+	embers_lbl.modulate = Color(2.4, 1.4, 0.5)
+	embers_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(embers_lbl)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0.0, 6.0)

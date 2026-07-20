@@ -39,6 +39,8 @@ func _process(_delta: float) -> bool:
 				"upgrade": phase._show_upgrade_choice()
 				"gameover": phase._trigger_game_over()
 				"pause": phase.toggle_pause()
+		elif _forced_screen == "roost" and current_scene.has_method("_on_roost"):
+			current_scene._on_roost()
 	if _frames >= 100 and not _done:
 		_done = true
 		var img: Image = root.get_texture().get_image()
