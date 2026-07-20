@@ -221,6 +221,19 @@ Your body language is the entire combat kit: no buttons, no abilities. Aim by dr
 - Sprint-by lash / whip-crack on sharp turns (up to 1500 px/s) → shreds
 - Tail-end units genuinely swing fastest in turns (real whip dynamics, free from the physics)
 
+**The symmetry rule (bot-playtest driven, Jul 2026):** slow touching units
+are DEVOURED by any enemy (`EAT_RATE` 0.45/s chance) — speed is offense AND
+defense. Discovered because guaranteed kill-loot made pressure feed the flock:
+a no-dodge bot survived every difficulty curve (3 runs, 214–276 kills, never
+died). Fixes in the same pass: common kills drop strays at 45% (heavies always
+pay, Bountiful Kills guarantees), unit cap 250→180, enemy cap 16→20, spawn
+floor 1.2→1.0s, HP ramp +18%/min.
+
+**Bot playtest harness** (`tools/bot_playtest.gd`): drives full headless runs
+at 8× (`--script tools/bot_playtest.gd -- 8`), prints JSON metrics
+(outcome/survival/kills/score/peak/lost/embers). Run it after every balance
+change — it's the game's balance CI.
+
 **The second pillar (G2+):** enemies don't hurt *you* — they eat your **stragglers**.
 The flock is health, weapon, and spectacle at once. Strays in the world are the
 pickup economy. Defense and offense are the same verb: moving well.

@@ -36,6 +36,11 @@ var stray_drop: int = 1         # strays left behind on death (also score weight
 var ember_bonus: int = 0        # meta-currency bounty (Sovereigns)
 
 signal died(enemy)
+signal ate_unit(world_pos: Vector2)
+
+# The symmetry rule (bot-playtest driven): fast units deal damage AND are
+# safe; SLOW units deal nothing and get devoured. Speed is offense + defense.
+const EAT_RATE := 0.45   # per-second chance to devour a slow touching unit
 
 var health: float = 0.0
 var _target: Node2D = null
@@ -122,6 +127,12 @@ func process_flock_contact(swarm_units: Array, delta: float) -> void:
 			continue
 		var speed: float = u.vel.length()
 		if speed <= min_damage_speed:
+			# Too slow to hurt us — slow enough to be eaten
+			if randf() < EAT_RATE * delta:
+				var upos: Vector2 = u.global_position
+				u.get_eaten()
+				_flash = maxf(_flash, 0.5)
+				ate_unit.emit(upos)
 			continue
 		var frac: float = clampf((speed - min_damage_speed) / (speed_for_max - min_damage_speed), 0.0, 1.0)
 		var dmg_mult: float = _mods.damage_mult if _mods != null else 1.0

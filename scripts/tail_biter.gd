@@ -6,8 +6,6 @@ extends "res://scripts/enemy.gd"
 # the tell; the lunge direction locks when it fires, so a sharp turn dodges.
 # Eating banishes the unit to the map edge (Phase1 respawns a stray).
 
-signal ate_unit(world_pos: Vector2)
-
 @export var stalk_speed: float = 340.0
 @export var lunge_speed: float = 950.0     # faster than anything alive — but straight
 @export var lunge_range: float = 260.0     # coils when this close to prey

@@ -76,6 +76,9 @@ var _has_collected: bool = false
 var _game_over: bool = false
 var _game_over_at_ms: int = 0
 var _run_start_ms: int = 0
+# Simulated run time (physics-accumulated): pause-immune and time_scale-correct,
+# unlike wall clock — drives difficulty, Sovereign cadence, and survival stats
+var run_time: float = 0.0
 var _peak_swarm: int = 0
 var units_lost: int = 0
 
@@ -209,7 +212,7 @@ func _do_pulse() -> void:
 # Physics-juice pass: impact feedback systems
 const SHOCKWAVE_RADIUS := 160.0      # death blast physically ripples the flock
 const SHOCKWAVE_POWER := 900.0
-const MAX_TOTAL_UNITS := 250         # cap on strays dropped by kills
+const MAX_TOTAL_UNITS := 180         # cap on strays dropped by kills (bot data: 250 made the flock unkillable)
 
 var _cam: Camera2D
 var _sfx: Node
@@ -473,6 +476,7 @@ func _physics_process(delta: float) -> void:
 	if _game_over:
 		return
 
+	run_time += delta
 	_update_perf_hud(delta)
 
 	if player == null:
@@ -578,15 +582,17 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 	var enemies: Array = get_tree().get_nodes_in_group("enemies")
 
 	# G5 difficulty curve: spawns quicken and the cap grows as minutes pass
-	var minutes: float = float(Time.get_ticks_msec() - _run_start_ms) / 60000.0
+	# (run_time, not wall clock — pausing no longer secretly ramps difficulty)
+	var minutes: float = run_time / 60.0
 
 	# The Sovereign descends on a cadence — every run gets boss rhythm
 	_sovereign_timer -= delta
 	if _sovereign_timer <= 0.0:
 		_sovereign_timer = 130.0
 		_spawn_sovereign(minutes)
-	var interval: float = maxf(enemy_spawn_interval / (1.0 + minutes * 0.35), 1.2)
-	var cap: int = mini(max_enemies + int(minutes * 2.0), 16)
+	# Bot-playtest tuned: a no-dodge bot survived the old curve to the sim cap
+	var interval: float = maxf(enemy_spawn_interval / (1.0 + minutes * 0.35), 1.0)
+	var cap: int = mini(max_enemies + int(minutes * 2.0), 20)
 
 	if enemies.size() < cap:
 		_enemy_spawn_timer -= delta
@@ -698,7 +704,7 @@ func _spawn_enemy(minutes: float = 0.0) -> void:
 	e.global_position = player.global_position + Vector2(cos(a), sin(a)) * enemy_spawn_distance
 	e.set_target(player)
 	# Late-run enemies get tougher (visible in their health arcs)
-	e.max_health *= 1.0 + minutes * 0.15
+	e.max_health *= 1.0 + minutes * 0.18
 	e.health = e.max_health
 	e.died.connect(_on_enemy_died)
 	if e.has_signal("ate_unit"):
@@ -806,9 +812,11 @@ func _on_enemy_died(e) -> void:
 	_death_shockwave(pos)
 	play_sfx("kill")
 
-	# Loot: heavier enemies pay out more strays
+	# Loot (bot data: guaranteed drops made pressure feed the flock — runaway
+	# snowball). Heavies always pay; common kills pay 45%; Bountiful guarantees.
 	for i in range(e.stray_drop + loot_bonus):
-		_drop_stray(pos)
+		if e.stray_drop > 1 or i >= e.stray_drop or randf() < 0.45:
+			_drop_stray(pos)
 
 	# Level up on kill thresholds
 	if kills >= _kills_to_next:
@@ -856,7 +864,7 @@ func _trigger_game_over() -> void:
 		_music.set_target("base", 0.45)
 
 	# Persist bests + bank the run's Embers (roguelite loop)
-	var secs_run: int = int(float(Time.get_ticks_msec() - _run_start_ms) / 1000.0)
+	var secs_run: int = int(run_time)
 	var new_best: bool = score > best_score
 	if new_best:
 		best_score = score
@@ -893,7 +901,7 @@ func _trigger_game_over() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
-	var secs: int = int((Time.get_ticks_msec() - _run_start_ms) / 1000.0)
+	var secs: int = int(run_time)
 	var score_lbl := Label.new()
 	if score >= best_score:
 		score_lbl.text = "Score %d   —   NEW BEST" % score
