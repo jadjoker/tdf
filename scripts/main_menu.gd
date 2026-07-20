@@ -48,6 +48,12 @@ func _ready() -> void:
 	var grid := preload("res://scripts/grid_background.gd").new()
 	add_child(grid)
 
+	# The score idles gently under the menu — the flock at rest
+	var music := preload("res://scripts/music_director.gd").new()
+	add_child(music)
+	music.set_target("base", 0.8)
+	music.set_target("warm", 0.35)
+
 	_build_ui()
 
 
@@ -188,6 +194,13 @@ func _build_ui() -> void:
 	vs.add_theme_color_override("font_color", UIS.TEXT)
 	vs.toggled.connect(_on_vsync)
 	settings_box.add_child(vs)
+
+	var fx := CheckBox.new()
+	fx.text = "Reduce effects (shake / flash)"
+	fx.button_pressed = cfg.get_value("settings", "reduce_fx", false)
+	fx.add_theme_color_override("font_color", UIS.TEXT)
+	fx.toggled.connect(func(on: bool) -> void: GS.save_setting("reduce_fx", on))
+	settings_box.add_child(fx)
 
 	var theme_label := Label.new()
 	theme_label.text = "Theme"

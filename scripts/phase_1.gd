@@ -213,6 +213,9 @@ const MAX_TOTAL_UNITS := 250         # cap on strays dropped by kills
 
 var _cam: Camera2D
 var _sfx: Node
+var _music: Node
+var _reduce_fx: bool = false
+var _pulse_label: Label = null
 var _pause_layer: CanvasLayer = null
 var _trauma: float = 0.0             # camera shake energy, decays; shake = trauma²
 var _combo: int = 0
@@ -240,6 +243,11 @@ func _ready() -> void:
 	_sfx = preload("res://scripts/sfx_player.gd").new()
 	_sfx.name = "Sfx"
 	add_child(_sfx)
+	_music = preload("res://scripts/music_director.gd").new()
+	_music.name = "Music"
+	add_child(_music)
+	_music.set_target("base", 1.0)
+	_reduce_fx = preload("res://scripts/game_settings.gd").load_all().get_value("settings", "reduce_fx", false)
 	var pause_ctl := preload("res://scripts/pause_controller.gd").new()
 	pause_ctl.name = "PauseController"
 	add_child(pause_ctl)
@@ -283,6 +291,14 @@ func _process(delta: float) -> void:
 	if _announce_alpha > 0.0 and _announce_label != null:
 		_announce_alpha = maxf(_announce_alpha - delta * 0.55, 0.0)
 		_announce_label.modulate.a = minf(_announce_alpha, 1.0)
+
+	if _pulse_label != null and not _game_over:
+		if _pulse_cd <= 0.0:
+			_pulse_label.text = "pulse ready"
+			_pulse_label.modulate = UIS.MINT
+		else:
+			_pulse_label.text = "pulse %.1f" % _pulse_cd
+			_pulse_label.modulate = Color(0.5, 0.55, 0.65, 0.8)
 
 
 func _build_swarm_renderers() -> void:
@@ -398,6 +414,13 @@ func _build_perf_hud() -> void:
 	_kills_label.modulate = Color(1.0, 0.75, 0.6)
 	UIS.outline(_kills_label, 6)
 	layer.add_child(_kills_label)
+
+	# Pulse readiness — small, always-current
+	_pulse_label = Label.new()
+	_pulse_label.position = Vector2(14.0, 36.0)
+	_pulse_label.add_theme_font_size_override("font_size", 12)
+	UIS.outline(_pulse_label, 4)
+	layer.add_child(_pulse_label)
 
 	# Dev perf readout: bottom-left, small and dim; hidden in release builds
 	_perf_label = Label.new()
@@ -575,11 +598,21 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 	if _wake != null and wake_level > 0:
 		_wake.track(player.global_position, delta)
 
+	# Adaptive score: flock size warms the chord, closing enemies sharpen it,
+	# a living Sovereign brings the dread pulse
+	var near_enemies: int = 0
+	var boss_alive: bool = false
+
 	for e in enemies:
 		e.process_flock_contact(swarm_units, delta)
 
 		if not is_instance_valid(e):
 			continue
+
+		if e.global_position.distance_to(player.global_position) < 750.0:
+			near_enemies += 1
+		if e.ember_bonus > 0:
+			boss_alive = true
 
 		if _wake != null and wake_level > 0:
 			for p in _wake.points:
@@ -596,6 +629,11 @@ func _update_enemies(swarm_units: Array, delta: float) -> void:
 				e.take_external_damage(COMET_DPS * comet_level * frac * delta)
 
 	_resolve_enemy_collisions(swarm_units, enemies)
+
+	if _music != null:
+		_music.set_target("warm", clampf(float(collected_count) / 100.0, 0.15, 1.0))
+		_music.set_target("tension", clampf(float(near_enemies) / 5.0, 0.0, 1.0))
+		_music.set_target("boss", 1.0 if boss_alive else 0.0)
 
 
 # Enemies are physically real: units shove them (the ring is a flexing wall
@@ -809,6 +847,13 @@ func _trigger_game_over() -> void:
 	_game_over_at_ms = Time.get_ticks_msec()
 	Engine.time_scale = 1.0
 	play_sfx("gameover")
+
+	# The score exhales with the flock
+	if _music != null:
+		_music.set_target("warm", 0.0)
+		_music.set_target("tension", 0.0)
+		_music.set_target("boss", 0.0)
+		_music.set_target("base", 0.45)
 
 	# Persist bests + bank the run's Embers (roguelite loop)
 	var secs_run: int = int(float(Time.get_ticks_msec() - _run_start_ms) / 1000.0)
@@ -1145,13 +1190,14 @@ func play_sfx(sfx_name: String, pitch: float = 1.0) -> void:
 
 
 func add_trauma(amount: float) -> void:
-	_trauma = minf(_trauma + amount, 1.0)
+	# Accessibility: reduced-effects mode quarters the shake
+	_trauma = minf(_trauma + amount * (0.25 if _reduce_fx else 1.0), 1.0)
 
 
 func _hit_stop(duration: float = 0.05, time_scale: float = 0.05) -> void:
 	# Micro-freeze on kills — makes impacts land. Timer ignores time_scale
 	# so the freeze doesn't stretch itself.
-	if Engine.time_scale < 1.0:
+	if _reduce_fx or Engine.time_scale < 1.0:
 		return
 	Engine.time_scale = time_scale
 	var t := get_tree().create_timer(duration, true, false, true)

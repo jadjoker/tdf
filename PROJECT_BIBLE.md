@@ -171,6 +171,26 @@ Bounty: 8 strays + 50 Embers + fanfare. Center-screen announce system
 
 ---
 
+## Adaptive Soundtrack (Jul 2026 — the music IS the murmuration)
+
+Four loop-perfect 16s stems (script-generated, `gen_music.py` → `assets/music/`,
+shared A-minor tonality, frequencies quantized to 1/16 Hz so loops are
+mathematically seamless), played in sync by `music_director.gd` and mixed
+live by game state:
+
+| Stem | Meaning | Driven by |
+|---|---|---|
+| base | the void | always on; softens at death |
+| warm | the flock chord (Am add9, detune-chorus) | flock size /100 |
+| tension | the hunt (minor-second shimmer + noise) | enemies within 750px /5 |
+| boss | Sovereign dread (2Hz pulse + tritone) | Sovereign alive |
+
+Menu idles at base 0.8 / warm 0.35. Master −10 dB under SFX; volume slider
+governs all. **Accessibility:** "Reduce effects" setting quarters screen shake
+and disables hit-stop. **HUD:** live pulse-cooldown readout.
+
+---
+
 ## Flock Verbs (added Jul 2026 — playtest: "travel time is boring")
 
 Two active commands fill the dead air between moving and ring-forming, both
